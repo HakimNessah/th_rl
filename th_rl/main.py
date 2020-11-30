@@ -9,7 +9,7 @@ from th_rl.logger import *
 @click.option('--agent', default='ActorCritic', help='Agent.')
 @click.option('--env', default='PriceState', help='Environment.')
 @click.option('--dir', default=r'C:\Users\niki\Source\electricity_rl\Experiments', help='experiment save location.')
-@click.option('--epochs', default=100, help='training epochs.')
+@click.option('--epochs', default=500, help='training epochs.')
 @click.option('--max_steps', default=100, help='environment trajectory length.')
 @click.option('--greedy', default=0, help='number of greedy agents.')
 @click.option('--gamma', default=0.995, help='gamma')
