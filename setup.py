@@ -8,9 +8,9 @@ setup(name='th_rl',
       license='MIT',
       packages=['th_rl'],
       install_requires=[
-          'click',
-          'pandas',
-          'torch',
-          'numpy'
+	  'click',
+	  'pandas',
+        'matplotlib',
+        'numpy'
       ],      
       zip_safe=False)
