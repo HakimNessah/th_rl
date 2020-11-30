@@ -17,7 +17,7 @@ class GreedyDiscrete():
         
     def sample_action(self, price):
         # Assumes other agents would play the same and he optimizes his action accordingly        
-        others = 1-price/env.a-self.last_action
+        others = 1-price/self.env.a-self.last_action
         new_action = np.clip((1-others)/2,self.collusion_action,self.monopole_action)
         self.last_action = new_action
         daction = int(new_action*self.env.nactions)
@@ -285,7 +285,7 @@ class PPO(nn.Module):
 
 class SACQNet(nn.Module):
     def __init__(self, states=3, actions=1, learning_rate=0.001, tau=0.01):
-        super(QNet, self).__init__()
+        super(SACQNet, self).__init__()
         self.tau = tau
         self.fc_s = nn.Linear(states, 64)
         self.fc_a = nn.Linear(actions,64)
@@ -314,7 +314,7 @@ class SACQNet(nn.Module):
 
 class SACPolicyNet(nn.Module):
     def __init__(self, states=3, actions=1, learning_rate=0.0005, init_alpha=0.01, target_entropy=-1., lr_alpha=1e-3, activation=torch.tanh):
-        super(PolicyNet, self).__init__()
+        super(SACPolicyNet, self).__init__()
         self.init_alpha = init_alpha
         self.target_entropy = target_entropy
         self.fc1 = nn.Linear(states, 128)

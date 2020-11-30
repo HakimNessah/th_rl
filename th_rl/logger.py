@@ -32,6 +32,8 @@ class Logger():
             action, reward = [],[]
             for j in range(100):
                 act = [agent.sample_action(torch.from_numpy(scenarios[[i]]).float()) for agent in agents]
+                if labels[0]=='PPO':
+                    act = [a[0] for a in act]
                 env.reset()
                 _, r, _, _ = env.step(act)
                 action.append(np.array(act))

@@ -47,9 +47,9 @@ def train(**config):
     # Add Greedy Agents
     for _ in range(greedy):
         if discrete:
-            agents.append(GreedyDiscrete(environment))
+            agents.append(GreedyDiscrete(environment, agents[0].experience))
         else:
-            agents.append(GreedyContinuous(environment))
+            agents.append(GreedyContinuous(environment, agents[0].experience))
 
     if len(load)>0:
         log = Logger(dir, config, load)
@@ -69,11 +69,18 @@ def train(**config):
         while not done:
             # choose actions and step through environment
             action = [agent.sample_action(torch.from_numpy(state).float()) for agent in agents]
+            if agent=='PPO':
+                prob  = [a[1] for a in action]                
+                action = [a[0] for a in action]                
             next_state, reward, welfare, done = environment.step(action)
 
             # save transition to the replay memory
-            for A,r,a in zip(agents, reward, action):          
-                A.memory.append(state,a,r,not done,next_state)
+            if agent=='PPO':
+                for A,r,a,p in zip(agents, reward, action, prob):          
+                    A.memory.append(state,a,r/10,not done,next_state,p)  
+            else:                    
+                for A,r,a in zip(agents, reward, action):
+                    A.memory.append(state,a,r/10,not done,next_state)              
             state = next_state
             ep_r += sum(reward)
         scores.append(ep_r)
