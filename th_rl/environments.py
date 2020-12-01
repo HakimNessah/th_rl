@@ -26,7 +26,7 @@ class PriceState():
     def scale_actions(self, actions):
         A = np.array(actions)
         if self.discrete:
-            return (self.a/self.b)*(A/(self.nactions-1)*(self.action_range[1]-self.action_range[0])+self.action_range[0])
+            return (self.a/self.b)*(A/(self.nactions-1.)*(self.action_range[1]-self.action_range[0])+self.action_range[0])
         else:
             return (self.a/self.b)*np.clip(A, self.action_range[0], self.action_range[1])
 
@@ -95,7 +95,7 @@ class ActionState():
     def scale_actions(self, actions):
         A = np.array(actions)
         if self.discrete:
-            return (self.a/self.b)*(A/(self.nactions-1)*(self.action_range[1]-self.action_range[0])+self.action_range[0])
+            return (self.a/self.b)*(A/(self.nactions-1.)*(self.action_range[1]-self.action_range[0])+self.action_range[0])
         else:
             return (self.a/self.b)*np.clip(A, self.action_range[0], self.action_range[1])
 

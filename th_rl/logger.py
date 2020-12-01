@@ -8,8 +8,8 @@ import torch
 import numpy as np
 
 class Logger():
-    def __init__(self, loc, config, id=''):    
-        self.id = id if len(id)>0 else ''.join(random.choices(string.ascii_lowercase,k=8)) 
+    def __init__(self, loc, config, id):    
+        self.id = id
         self.dir = os.path.join(loc, self.id)
         Path(self.dir).mkdir(parents=True, exist_ok=True)
         self.loc = os.path.join(self.dir, 'result.csv')
@@ -32,7 +32,7 @@ class Logger():
             action, reward = [],[]
             for j in range(100):
                 act = [agent.sample_action(torch.from_numpy(scenarios[[i]]).float()) for agent in agents]
-                if labels[0]=='PPO':
+                if labels[0] in ['PPO','Reinforce']:
                     act = [a[0] for a in act]
                 env.reset()
                 _, r, _, _ = env.step(act)
