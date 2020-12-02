@@ -22,18 +22,18 @@ from th_rl.logger import *
 @click.option('--encoder', default='none', help='Action Encoder',type=str)
 @click.option('--load', default=0, help='Load pre-trained agents',type=int)
 @click.option('--print_freq', default=20, help='Print Frequency',type=int)
+@click.option('--batch_size', default=20, help='Print Frequency',type=int)
 @click.option('--id', default=''.join(random.choices(string.ascii_lowercase,k=8)) , help='scenario ID',type=str)
 def train(**config):
     globals().update(config)
     total_players = nplayers+greedy
-    if agent in ['SAC', 'DDPG']:
+    if agent in ['SAC', 'TD3']:
         actions = 1
         discrete = False
-        action_range = [0,1]
     else:
         actions = nactions
         discrete = True
-        action_range = [action_min,action_max]
+    action_range = [action_min,action_max]
 
     environment = eval(env)(nactions=nactions, 
                             nplayers=total_players, 
@@ -42,10 +42,13 @@ def train(**config):
                             max_steps=max_steps, 
                             encoder=encoder,
                             discrete=discrete)
-
+                            
     agents = [eval(agent)(states=environment.encode().shape[-1], 
                           actions=actions, 
-                          gamma=gamma) for _ in range(config['nplayers'])]
+                          gamma=gamma,
+                          batch_size=batch_size,
+                          eps_step=1./epochs,
+                          epsilon=0.5) for _ in range(config['nplayers'])]
     
     # Add Greedy Agents
     for _ in range(greedy):
@@ -78,26 +81,29 @@ def train(**config):
             # save transition to the replay memory
             if agent=='Reinforce':
                 for A,r,a,p in zip(agents, reward, action, prob):          
-                    A.memory.append(r/10,a,p)                  
+                    A.memory.append(r,a,p)                  
             elif agent=='PPO':
                 for A,r,a,p in zip(agents, reward, action, prob):          
-                    A.memory.append(state,a,r/10,not done,next_state,p)  
+                    A.memory.append(state,a,r,not done,next_state,p)  
             else:                    
                 for A,r,a in zip(agents, reward, action):
-                    A.memory.append(state,a,r/10,not done,next_state)              
+                    A.memory.append(state,a,r,not done,next_state)
             state = next_state
             ep_r += sum(reward)
         scores.append(ep_r)
         episodes.append(e)   
-        
         # Train
         [A.train_net() for A in agents]
 
         if not (e%print_freq):
             tr = np.mean(scores[-print_freq:])
             sr = tr/environment.max_steps
-            print("time:{:2.2f} | episode:{:3d} | mean trajectory reward:{:2.2f} | mean step reward:{:2.2f}".format(time.time()-t,e,tr,sr))
-            t = time.time()  
+            print("time:{:2.2f} | episode:{:3d} | mean trajectory reward:{:2.2f} | mean step reward:{:2.2f}".format(
+                time.time()-t,e,tr,sr))
+            t = time.time()
+
+        #if np.mean(scores[-10:])/environment.max_steps > 24.5:
+        #    break # Collusion was found
 
     # Save results
     logdata = np.stack([np.array(x) for x in [episodes, scores]],axis=1)
@@ -109,6 +115,8 @@ def train(**config):
 
     # Save figures
     log.plot_state_sweep(environment, agents)
+    log.plot_trajectory(environment, agents)
+    log.plot_learning(environment, scores, 'Total Step Reward')
 
     # Save trained models
     for i,A in enumerate(agents):

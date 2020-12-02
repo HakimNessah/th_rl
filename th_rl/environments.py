@@ -13,8 +13,6 @@ class PriceState():
         self.state = self.sample_state()      
         self.episode = 0 
         self.encoder = encoder
-        if not discrete:
-            assert action_range==[0,1], 'In continuous action space range is assumed to be [0,1]'
         assert encoder=='none', 'Discrete Prices are not supported!'
 
     def sample_state(self):
@@ -28,7 +26,7 @@ class PriceState():
         if self.discrete:
             return (self.a/self.b)*(A/(self.nactions-1.)*(self.action_range[1]-self.action_range[0])+self.action_range[0])
         else:
-            return (self.a/self.b)*np.clip(A, self.action_range[0], self.action_range[1])
+            return (self.a/self.b)*(1/(1+np.exp(-A))*(self.action_range[1]-self.action_range[0])+self.action_range[0])
 
     def step(self, actions):
         A = self.scale_actions(actions)
@@ -97,7 +95,7 @@ class ActionState():
         if self.discrete:
             return (self.a/self.b)*(A/(self.nactions-1.)*(self.action_range[1]-self.action_range[0])+self.action_range[0])
         else:
-            return (self.a/self.b)*np.clip(A, self.action_range[0], self.action_range[1])
+            return (self.a/self.b)*(1/(1+np.exp(-A))*(self.action_range[1]-self.action_range[0])+self.action_range[0])
 
     def step(self, actions):
         A = self.scale_actions(actions)

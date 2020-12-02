@@ -10,5 +10,5 @@ for i in range(scenarios.shape[0]):
         opt = ' --'+s+'='+str(scen[s])
         command += opt
 
-    #print(command)
+    print(command)
     os.system(command)
