@@ -301,7 +301,7 @@ class SACQNet(nn.Module):
         self.fc_cat = nn.Linear(128,32)
         self.fc_out = nn.Linear(32,actions)
         self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
-        self.selu = torch.tanh
+        self.selu = torch.nn.SELU()
 
     def forward(self, x, a):
         h1 = self.selu(self.fc_s(x))
@@ -335,7 +335,7 @@ class SACPolicyNet(nn.Module):
         self.log_alpha = torch.tensor(np.log(self.init_alpha))
         self.log_alpha.requires_grad = True
         self.log_alpha_optimizer = optim.Adam([self.log_alpha], lr=lr_alpha)
-        self.selu = torch.tanh
+        self.selu = torch.nn.SELU()
 
     def forward(self, x):
         x = self.selu(self.fc1(x))
