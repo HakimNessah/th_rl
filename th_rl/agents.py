@@ -45,8 +45,12 @@ class GreedyContinuous():
         others = 1-price/self.env.a-self.last_action
         new_action = np.clip((1-others)/2,self.collusion_action,self.monopole_action)
         self.last_action = new_action
-        return new_action[0]
+        return self.iscale(new_action[0])
     
+    def iscale(self,act):
+        # Need to revert the sigmoid scaling in the env
+        return np.log(act/(1-act+1e-7)+1e-7)
+
     def train_net(self):
         pass
 
