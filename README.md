@@ -1,5 +1,5 @@
 # th_rl
-Pytorch Reinforcement Learning agents in aн iterated prisonner dilemma setting
+Pytorch Reinforcement Learning agents in an iterated prisonner dilemma setting
 
 ## Agents
 - Discrete:
