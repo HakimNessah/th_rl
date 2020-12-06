@@ -1,5 +1,7 @@
 # th_rl
-Pytorch Reinforcement Learning agents in an iterated prisonner dilemma setting
+Pytorch Reinforcement Learning agents in an iterated prisonner dilemma setting.
+Application to electricity/power market dynamics.
+All experiments stored in https://github.com/nikitcha/electricity_rl
 
 ## Agents
 - Discrete:
@@ -12,12 +14,12 @@ Pytorch Reinforcement Learning agents in an iterated prisonner dilemma setting
     - TD3
 
 ## Multi-agent environments
-- State-Price
+- State-Price (v)
     - Discrete or continuous action spaces
+    - Discrete or continuous state (price) space
     - Linear price as function of production
-- State-Action
-    - Discrete or continuous
-    - Linear price as function of production
+- State-Action (x)
+    - Not implemented
 
 ## Buffers
 - Standard replay buffer 
