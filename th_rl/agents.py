@@ -217,8 +217,7 @@ class DQN(nn.Module):
 
     def sample_action(self, obs):
         out = self.q(obs)
-        coin = random.random()
-        if coin < self.epsilon:
+        if random.random() < self.epsilon:
             return np.random.randint(0,self.actions)
         else : 
             return out.argmax().item()      
@@ -444,13 +443,11 @@ class SAC(nn.Module):
 class TDActor(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(TDActor, self).__init__()
-
         self.l1 = nn.Linear(state_dim, 256)
         self.l2 = nn.Linear(256, 256)
         self.l3 = nn.Linear(256, action_dim)
         self.selu = torch.relu
   
-
     def forward(self, state):
         a = self.selu(self.l1(state))
         a = self.selu(self.l2(a))
@@ -459,12 +456,10 @@ class TDActor(nn.Module):
 class TDCritic(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(TDCritic, self).__init__()
-
         # Q1 architecture
         self.l1 = nn.Linear(state_dim + action_dim, 256)
         self.l2 = nn.Linear(256, 256)
         self.l3 = nn.Linear(256, 1)
-
         # Q2 architecture
         self.l4 = nn.Linear(state_dim + action_dim, 256)
         self.l5 = nn.Linear(256, 256)
@@ -474,11 +469,9 @@ class TDCritic(nn.Module):
 
     def forward(self, state, action):
         sa = torch.cat([state, action], 1)
-
         q1 = self.selu(self.l1(sa))
         q1 = self.selu(self.l2(q1))
         q1 = self.l3(q1)
-
         q2 = self.selu(self.l4(sa))
         q2 = self.selu(self.l5(q2))
         q2 = self.l6(q2)
@@ -487,7 +480,6 @@ class TDCritic(nn.Module):
 
     def Q1(self, state, action):
         sa = torch.cat([state, action], 1)
-
         q1 = self.selu(self.l1(sa))
         q1 = self.selu(self.l2(q1))
         q1 = self.l3(q1)
@@ -513,29 +505,23 @@ class TD3(nn.Module):
         self.actor = TDActor(states, actions).to(device)
         self.actor_target = copy.deepcopy(self.actor)
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=3e-4)
-
         self.critic = TDCritic(states, actions).to(device)
         self.critic_target = copy.deepcopy(self.critic)
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=3e-4)
-
         self.gamma = gamma
         self.tau = tau
         self.policy_noise = policy_noise
         self.noise_clip = noise_clip
         self.policy_freq = policy_freq
-
         self.total_it = 0
-
         self.experience = namedtuple('Experience', field_names=['state', 'action', 'reward','done', 'new_state'])
         self.cast = [torch.float, torch.float, torch.float, torch.float, torch.float]
         self.memory = eval(buffer)(capacity,self.experience)        
         self.batch_size = batch_size		
 
-
     def sample_action(self, state):
         state = torch.FloatTensor(state.reshape(1, -1)).to(device)
         return self.actor(state).item()
-
 
     def train_net(self):
         if len(self.memory)>1000:
