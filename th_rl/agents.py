@@ -56,28 +56,41 @@ class GreedyContinuous():
 
 
 class QTable():
-    def __init__(self, states=16, actions=4, gamma=0.99, alpha=0.1, epsilon=0.9, epsilon_min=0.01, epsilon_decay=2e-6, **kwargs):
+    def __init__(self, states=16, actions=4, gamma=0.99, buffer='ReplayBuffer', capacity=500,
+                alpha=0.1, eps_end=1e-3, epsilon=0.5, eps_step=5e-4, **kwargs):
         self.table = np.zeros([states, actions])
         self.gamma = gamma
         self.alpha = alpha
         self.action_space = np.arange(0,actions)
         self.epsilon = epsilon
-        self.epsilon_decay = epsilon_decay
-        self.epsilon_min = epsilon_min
+        self.eps_step = eps_step
+        self.eps_end = eps_end
+        self.experience = namedtuple('Experience', field_names=['state', 'action', 'reward','done', 'new_state'])
+        self.memory = eval(buffer)(capacity,self.experience)
 
-    def train_net(self, state, next_state, action):
-        old_value = self.table[state, action]
-        next_max = np.max(self.table[next_state])
-        new_value = (1 - self.alpha) * old_value + self.alpha * (reward + self.gamma * next_max)
-        self.table[state, action] = new_value
-        self.epsilon = np.clip(self.epsilon-self.epsilon_decay, self.epsilon_min,1)
+    def train_net(self):
+        state, a, r, not_done, next_state = self.memory.replay()
+        [actions,not_done,rewards] = [np.reshape(x,[-1]) for x in [a,not_done,r]]
+        [state,next_state] = [np.argmax(s,axis=1) for s in [state, next_state]]
+        old_value = self.table[state, actions]
+        next_max = np.max(self.table[next_state],axis=1)
+        
+        # Discount rewards 
+        rewards = rewards[::-1]
+        for i in range(1,rewards.shape[0]):
+            rewards[i] = self.gamma*rewards[i-1] + (1-self.gamma)*rewards[i]
+        rewards = rewards[::-1]
+
+        new_value = (1 - self.alpha) * old_value + self.alpha * (rewards + self.gamma * next_max)
+        self.table[state,actions] = new_value
+        self.epsilon = self.eps_end + (self.epsilon-self.eps_end)*self.eps_step
 
     def sample_action(self, state, epsilon=-1):
         eps = self.epsilon if epsilon==-1 else epsilon          
         if random.uniform(0, 1) < eps:
             action = random.choice(self.action_space)
         else:
-            action = np.argmax(self.table[state])
+            action = np.argmax(self.table[np.argmax(state)])
         return action
 
 class Reinforce(nn.Module):

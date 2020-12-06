@@ -43,7 +43,12 @@ class Logger():
         for i in range(scenarios.shape[0]):
             action, reward = [],[]
             for j in range(100):
-                act = [agent.sample_action(torch.from_numpy(scenarios[[i]]).float()) for agent in agents]
+                if labels[0]=='QTable':
+                    env.state = scenarios[[i]]/env.a;                    
+                    state = env.encode()
+                else:
+                    state = torch.from_numpy(scenarios[[i]]).float()
+                act = [agent.sample_action(state) for agent in agents]
                 if labels[0] in ['PPO','Reinforce']:
                     act = [a[0] for a in act]
                 env.reset()
@@ -54,9 +59,11 @@ class Logger():
             Actions.append(np.array(action))
         Actions = np.array(Actions)
         Rewards = np.array(Rewards)
-
-        if labels[0] in ['TD3','SAC']:
-            Actions = (1/(1+np.exp(-Actions)))*(env.action_range[1]-env.action_range[0])+env.action_range[0]
+        for i,L in enumerate(labels):
+            if L in ['TD3','SAC']:
+                Actions[:,:,i] = (1/(1+np.exp(-Actions[:,:,i])))*(env.action_range[1]-env.action_range[0])+env.action_range[0]
+            else:
+                Actions[:,:,i] = Actions[:,:,i]/(env.nactions[i]-1.)*(env.action_range[1]-env.action_range[0])+env.action_range[0]
 
         f,ax = plt.subplots(1,2,figsize=(12,5))
         mi = np.percentile(Actions,5,axis=1)
@@ -85,12 +92,14 @@ class Logger():
         Actions, Rewards, States = [],[],[]
         for _ in range(10):
             state = env.reset()
-            state = np.array([0.])
             A, R, S = [],[],[]
             for e in range(env.max_steps):
                 ep_r = 0    
                 # Get probabilities
-                S.append(state)
+                if labels[0]=='QTable':
+                    S.append(np.argmax(state)*env.a/env.nstates)
+                else:
+                    S.append(state)
                 action = [agent.sample_action(torch.from_numpy(state).float()) for agent in agents]
                 if labels[0] in ['PPO','Reinforce']:
                     action = [a[0] for a in action]
@@ -105,10 +114,12 @@ class Logger():
         
         Actions = np.stack(Actions,axis=2)
         Rewards = np.stack(Rewards,axis=1)
-        States = np.stack(States,axis=2)
-
-        if labels[0] in ['TD3','SAC']:
-            Actions = (1/(1+np.exp(-Actions)))*(env.action_range[1]-env.action_range[0])+env.action_range[0]
+        States = np.stack(States,axis=1)
+        for i,L in enumerate(labels):
+            if L in ['TD3','SAC']:
+                Actions[:,i,:] = (1/(1+np.exp(-Actions[:,i,:])))*(env.action_range[1]-env.action_range[0])+env.action_range[0]
+            else:
+                Actions[:,i,:] = Actions[:,i,:]/(env.nactions[i]-1.)*(env.action_range[1]-env.action_range[0])+env.action_range[0]
 
         f,ax = plt.subplots(1,3,figsize=(16,4))
         ax[0].plot(np.mean(Actions,axis=2))
@@ -116,7 +127,7 @@ class Logger():
         [n,c] = env.get_optimal()
         ax[1].plot((0,Rewards.shape[0]),(n,n))
         ax[1].plot((0,Rewards.shape[0]),(c,c))
-        ax[2].plot(np.mean(States,axis=2))
+        ax[2].plot(np.mean(States,axis=1))
         [a.grid() for a in ax]
         [a.set_title(c) for a,c in zip(ax, ['Actions','Total Reward', 'Price'])]
         [a.set_xlabel('Step') for a in ax]

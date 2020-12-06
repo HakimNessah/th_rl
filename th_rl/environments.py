@@ -1,32 +1,35 @@
 import numpy as np
 
 class PriceState():
-    def __init__(self, nactions, nplayers, cost,action_range=[0,1], a=10, b=1,  max_steps=1, discrete=True, encoder='none'):
+    def __init__(self, nactions, nstates, nplayers, cost,action_range=[0,1], a=10, b=1,  max_steps=1):
         self.nactions = nactions
+        self.nstates = nstates
         self.nplayers = nplayers
         self.cost = cost
         self.action_range = action_range
         self.b = b
         self.a = a
         self.max_steps = max_steps
-        self.discrete = discrete                
         self.state = self.sample_state()      
         self.episode = 0 
-        self.encoder = encoder
-        assert encoder=='none', 'Discrete Prices are not supported!'
 
     def sample_state(self):
         return np.random.uniform(0, self.a)
     
     def encode(self):
-        return np.atleast_1d(self.state)
+        if self.nstates>1:
+            return np.eye(self.nstates)[int((self.state-1e-9)/self.a*self.nstates)]
+        else:
+            return np.atleast_1d(self.state)
 
     def scale_actions(self, actions):
-        A = np.array(actions)
-        if self.discrete:
-            return (self.a/self.b)*(A/(self.nactions-1.)*(self.action_range[1]-self.action_range[0])+self.action_range[0])
-        else:
-            return (self.a/self.b)*(1/(1+np.exp(-A))*(self.action_range[1]-self.action_range[0])+self.action_range[0])
+        A = []
+        for act, nact in zip(actions, self.nactions):
+            if nact>1:
+                A.append((self.a/self.b)*(act/(nact-1.)*(self.action_range[1]-self.action_range[0])+self.action_range[0]))
+            else:
+                A.append( (self.a/self.b)*(1/(1+np.exp(-act))*(self.action_range[1]-self.action_range[0])+self.action_range[0]))
+        return np.array(A)
 
     def step(self, actions):
         A = self.scale_actions(actions)
@@ -38,7 +41,7 @@ class PriceState():
         self.state = price  
         self.episode += 1
         done = self.episode>=self.max_steps
-        return np.atleast_1d(self.state), np.array(rewards), welfare, done 
+        return self.encode(), np.array(rewards), welfare, done 
     
     def get_optimal(self):
         anash = (self.a/self.b)*np.ones(self.nplayers,)/(self.nplayers+1)
@@ -54,9 +57,10 @@ class PriceState():
         self.state = self.sample_state()
         return self.encode()
 
-
+'''
 class ActionState():
-    def __init__(self, nactions, nplayers, cost,action_range=[0,1], a=10, b=1,  max_steps=1, discrete=True, encoder='none'):
+    def __init__(self, nactions, nplayers, cost,action_range=[0,1], a=10, b=1,  max_steps=1, discrete_actions=True, encoder='none'):
+        assert 0==1, 'Not Implemented!'
         self.nactions = nactions
         self.nplayers = nplayers
         self.cost = cost
@@ -64,15 +68,15 @@ class ActionState():
         self.b = b
         self.a = a
         self.max_steps = max_steps
-        self.discrete = discrete                
+        self.discrete_actions = discrete_actions                
         self.state = self.sample_state()      
         self.episode = 0 
         self.encoder = encoder
-        if not discrete:
+        if not discrete_actions:
             assert action_range==[0,1], 'In continuous action space range is assumed to be [0,1]'
 
     def encode(self):
-        if self.discrete:
+        if self.discrete_actions:
             if self.encoder=='none':
                 state = np.array(self.state)
             if self.encoder=='one_hot':
@@ -84,7 +88,7 @@ class ActionState():
         return np.array(self.state)
 
     def sample_state(self):
-        if self.discrete:
+        if self.discrete_actions:
             state = np.random.randint(0,self.nactions, self.nplayers)
         else:
             state = np.random.uniform(self.action_range[0],self.action_range[1], self.nplayers)
@@ -92,7 +96,7 @@ class ActionState():
     
     def scale_actions(self, actions):
         A = np.array(actions)
-        if self.discrete:
+        if self.discrete_actions:
             return (self.a/self.b)*(A/(self.nactions-1.)*(self.action_range[1]-self.action_range[0])+self.action_range[0])
         else:
             return (self.a/self.b)*(1/(1+np.exp(-A))*(self.action_range[1]-self.action_range[0])+self.action_range[0])
@@ -122,3 +126,4 @@ class ActionState():
         self.episode = 0
         self.state = self.sample_state()
         return self.encode()      
+'''        

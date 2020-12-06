@@ -16,43 +16,52 @@ from th_rl.logger import *
 @click.option('--greedy', default=0, help='number of greedy agents.',type=int)
 @click.option('--gamma', default=0.995, help='gamma', type=float)
 @click.option('--nactions', default=100, help='number of actions',type=int)
+@click.option('--nstates', default=1, help='number of actions',type=int)
 @click.option('--nplayers', default=3, help='number of players',type=int)
 @click.option('--action_min', default=0., help='min action',type=float)
 @click.option('--action_max', default=1., help='max action',type=float)
-@click.option('--encoder', default='none', help='Action Encoder',type=str)
 @click.option('--load', default=0, help='Load pre-trained agents',type=int)
 @click.option('--print_freq', default=20, help='Print Frequency',type=int)
 @click.option('--batch_size', default=20, help='Print Frequency',type=int)
 @click.option('--id', default=''.join(random.choices(string.ascii_lowercase,k=8)) , help='scenario ID',type=str)
 def train(**config):
     globals().update(config)
-    total_players = nplayers+greedy
-    if agent in ['SAC', 'TD3']:
-        actions = 1
-        discrete = False
+    
+    if ',' in agent:
+        agents = []
+        nact = []
+        for ag in agent.split(','):
+            assert ag in ['SAC','ActorCritic'], 'Agent '+ag+' not implemented!'
+            if ag=='SAC':
+                nact.append(1)
+            else:
+                nact.append(nactions)
+            agents.append(ag)
+            total_players = len(agents)
+            assert greedy==0, 'Greedy not implemented in mixed agents'
     else:
-        actions = nactions
-        discrete = True
-    action_range = [action_min,action_max]
+        agents = [agent]*nplayers
+        nact = [nactions]*nplayers
+        total_players = nplayers+greedy
 
-    environment = eval(env)(nactions=nactions, 
+    environment = eval(env)(nactions=nact, 
+                            nstates=nstates, 
                             nplayers=total_players, 
                             cost = np.zeros((total_players)), 
-                            action_range = action_range, 
-                            max_steps=max_steps, 
-                            encoder=encoder,
-                            discrete=discrete)
-                            
-    agents = [eval(agent)(states=environment.encode().shape[-1], 
-                          actions=actions, 
+                            action_range = [action_min,action_max], 
+                            max_steps=max_steps)
+
+    agents = [eval(ag)(states=environment.encode().shape[-1], 
+                          actions=na, 
                           gamma=gamma,
                           batch_size=batch_size,
-                          eps_step=1./epochs,
-                          epsilon=0.5) for _ in range(config['nplayers'])]
+                          eps_step=1-10/epochs,
+                          epsilon=1.) for ag,na in zip(agents,nact)]
     
     # Add Greedy Agents
     for _ in range(greedy):
-        if discrete:
+        assert nprices==1, 'Greedy not implemented in discrete price space'
+        if nactions>1:
             agents.append(GreedyDiscrete(environment, agents[0].experience))
         else:
             agents.append(GreedyContinuous(environment, agents[0].experience))
@@ -78,7 +87,7 @@ def train(**config):
                 action = [a[0] for a in action]                
             next_state, reward, welfare, done = environment.step(action)
 
-            # save transition to the replay memory
+            # save transition to the replay memory                 
             if agent=='Reinforce':
                 for A,r,a,p in zip(agents, reward, action, prob):          
                     A.memory.append(r,a,p)                  
@@ -100,6 +109,7 @@ def train(**config):
             sr = tr/environment.max_steps
             print("time:{:2.2f} | episode:{:3d} | mean trajectory reward:{:2.2f} | mean step reward:{:2.2f}".format(
                 time.time()-t,e,tr,sr))
+
             t = time.time()
 
         #if np.mean(scores[-10:])/environment.max_steps > 24.5:
@@ -120,9 +130,11 @@ def train(**config):
 
     # Save trained models
     for i,A in enumerate(agents):
-        if not A.__class__.__name__ in ['GreedyDiscrete','GreedyContinuous']:
+        if not A.__class__.__name__ in ['GreedyDiscrete','GreedyContinuous','QTable']:
             torch.save(A.state_dict(), os.path.join(log.dir,'model_'+str(i)+'.pt'))
-
+        if A.__class__.__name__=='QTable':
+            T = pd.DataFrame(A.table)
+            T.to_csv(os.path.join(log.dir,'model_'+str(i)+'.csv'))
 
 if __name__=='__main__':
     train()
