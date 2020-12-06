@@ -1,7 +1,8 @@
 # th_rl
-Pytorch Reinforcement Learning agents in an iterated prisonner dilemma setting.
-Application to electricity/power market dynamics.
-All experiments stored in https://github.com/nikitcha/electricity_rl
+Pytorch-based package for multi-agent reinforcement learning in an iterated prisonner dilemma setting.
+
+<br> Application to electricity/power market dynamics.
+<br> All experiments stored in https://github.com/nikitcha/electricity_rl
 
 ## Agents
 - Discrete:
