@@ -107,8 +107,12 @@ def train(**config):
         if not (e%print_freq):
             tr = np.mean(scores[-print_freq:])
             sr = tr/environment.max_steps
-            print("time:{:2.2f} | episode:{:3d} | mean trajectory reward:{:2.2f} | mean step reward:{:2.2f}".format(
-                time.time()-t,e,tr,sr))
+            if agents[0].__class__.__name__=='QTable':
+                print("time:{:2.2f} | episode:{:3d} | mean trajectory reward:{:2.2f} | mean step reward:{:2.2f} | epsilon:{:0.4f}".format(
+                    time.time()-t,e,tr,sr,agents[0].epsilon))
+            else:
+                print("time:{:2.2f} | episode:{:3d} | mean trajectory reward:{:2.2f} | mean step reward:{:2.2f}".format(
+                    time.time()-t,e,tr,sr))
 
             t = time.time()
 

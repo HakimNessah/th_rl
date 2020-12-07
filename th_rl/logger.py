@@ -57,7 +57,7 @@ class Logger():
                 reward.append(np.array(r))
             Rewards.append(np.array(reward))
             Actions.append(np.array(action))
-        Actions = np.array(Actions)
+        Actions = np.array(Actions).astype('float32')
         Rewards = np.array(Rewards)
         for i,L in enumerate(labels):
             if L in ['TD3','SAC']:
@@ -112,7 +112,7 @@ class Logger():
             Rewards.append(np.array(R))
             States.append(np.array(S))
         
-        Actions = np.stack(Actions,axis=2)
+        Actions = np.stack(Actions,axis=2).astype('float32')
         Rewards = np.stack(Rewards,axis=1)
         States = np.stack(States,axis=1)
         for i,L in enumerate(labels):

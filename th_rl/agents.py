@@ -58,7 +58,7 @@ class GreedyContinuous():
 class QTable():
     def __init__(self, states=16, actions=4, gamma=0.99, buffer='ReplayBuffer', capacity=500,
                 alpha=0.1, eps_end=1e-3, epsilon=0.5, eps_step=5e-4, **kwargs):
-        self.table = np.zeros([states, actions])
+        self.table = 100.*np.ones([states, actions])
         self.gamma = gamma
         self.alpha = alpha
         self.action_space = np.arange(0,actions)
@@ -73,14 +73,7 @@ class QTable():
         [actions,not_done,rewards] = [np.reshape(x,[-1]) for x in [a,not_done,r]]
         [state,next_state] = [np.argmax(s,axis=1) for s in [state, next_state]]
         old_value = self.table[state, actions]
-        next_max = np.max(self.table[next_state],axis=1)
-        
-        # Discount rewards 
-        rewards = rewards[::-1]
-        for i in range(1,rewards.shape[0]):
-            rewards[i] = self.gamma*rewards[i-1] + (1-self.gamma)*rewards[i]
-        rewards = rewards[::-1]
-
+        next_max = np.max(self.table[next_state],axis=1)       
         new_value = (1 - self.alpha) * old_value + self.alpha * (rewards + self.gamma * next_max)
         self.table[state,actions] = new_value
         self.epsilon = self.eps_end + (self.epsilon-self.eps_end)*self.eps_step
