@@ -57,8 +57,8 @@ class GreedyContinuous():
 
 class QTable():
     def __init__(self, states=16, actions=4, gamma=0.99, buffer='ReplayBuffer', capacity=500,
-                alpha=0.1, eps_end=1e-3, epsilon=0.5, eps_step=5e-4, **kwargs):
-        self.table = 100.*np.ones([states, actions])
+                alpha=0.1, eps_end=2e-2, epsilon=0.5, eps_step=5e-4, **kwargs):
+        self.table = 100/(1-gamma) + np.random.randn(states, actions) # np.zeros([states, actions])#
         self.gamma = gamma
         self.alpha = alpha
         self.action_space = np.arange(0,actions)
@@ -73,18 +73,25 @@ class QTable():
         [actions,not_done,rewards] = [np.reshape(x,[-1]) for x in [a,not_done,r]]
         [state,next_state] = [np.argmax(s,axis=1) for s in [state, next_state]]
         old_value = self.table[state, actions]
-        next_max = np.max(self.table[next_state],axis=1)       
-        new_value = (1 - self.alpha) * old_value + self.alpha * (rewards + self.gamma * next_max)
-        self.table[state,actions] = new_value
+        for ns,ov,re,st,ac in zip(next_state,old_value,rewards,state,actions):
+            next_max = np.max(self.table[ns])       
+            new_value = (1 - self.alpha) * ov + self.alpha * (re + self.gamma * next_max)
+            self.table[st,ac] = new_value
+
+        #next_max = np.max(self.table[next_state],axis=1)       
+        #new_value = (1 - self.alpha) * old_value + self.alpha * (rewards*(1-self.gamma) + self.gamma * next_max)
+        #self.table[state,actions] = new_value
         self.epsilon = self.eps_end + (self.epsilon-self.eps_end)*self.eps_step
 
-    def sample_action(self, state, epsilon=-1):
-        eps = self.epsilon if epsilon==-1 else epsilon          
-        if random.uniform(0, 1) < eps:
+    def sample_action(self, state):
+        if random.uniform(0, 1) < self.epsilon:
             action = random.choice(self.action_space)
         else:
             action = np.argmax(self.table[np.argmax(state)])
         return action
+
+    def get_action(self, state):
+        return np.argmax(self.table[np.argmax(state)])
 
 class Reinforce(nn.Module):
     def __init__(self, states=4, actions=2,gamma=0.98, entropy=0, buffer='ReplayBuffer', capacity=50000, **kwargs):
@@ -120,7 +127,7 @@ class Reinforce(nn.Module):
 
         self.optimizer.zero_grad()
         loss.backward()
-        self.optimizer.step()     
+        self.optimizer.step()
         self.memory.empty()           
 
 
@@ -155,6 +162,11 @@ class ActorCritic(nn.Module):
         prob = self.pi(state)
         m = Categorical(prob)
         return m.sample().item()
+
+    def get_action(self, state):
+        pi = self.pi(state)
+        m = torch.argmax(pi)
+        return m.item()
 
     def train_net(self):
         s, a, r, done, s_prime = self.memory.replay(self.cast)

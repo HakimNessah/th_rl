@@ -22,7 +22,8 @@ from th_rl.logger import *
 @click.option('--action_max', default=1., help='max action',type=float)
 @click.option('--load', default=0, help='Load pre-trained agents',type=int)
 @click.option('--print_freq', default=20, help='Print Frequency',type=int)
-@click.option('--batch_size', default=20, help='Print Frequency',type=int)
+@click.option('--batch_size', default=128, help='Print Frequency',type=int)
+@click.option('--eps_end', default=0.001, help='QTable min epsilon',type=float)
 @click.option('--id', default=''.join(random.choices(string.ascii_lowercase,k=8)) , help='scenario ID',type=str)
 def train(**config):
     globals().update(config)
@@ -56,7 +57,8 @@ def train(**config):
                           gamma=gamma,
                           batch_size=batch_size,
                           eps_step=1-10/epochs,
-                          epsilon=1.) for ag,na in zip(agents,nact)]
+                          epsilon=1.,
+                          eps_end=eps_end) for ag,na in zip(agents,nact)]
     
     # Add Greedy Agents
     for _ in range(greedy):
@@ -70,9 +72,12 @@ def train(**config):
     if load:
         # Load Pre-Trained models
         for i,A in enumerate(agents):
-            if not A.__class__.__name__ in ['GreedyDiscrete','GreedyContinuous']:
-                state_dict = torch.load(os.path.join(log.dir,'model_'+str(i)+'.pt'))
-                A.load_state_dict(state_dict)       
+            if A.__class__.__name__ in ['QTable']:
+                table = pd.read_csv(os.path.join(logdir,'model_'+str(i)+'.csv'))
+                A.table = table.values
+            elif not A.__class__.__name__ in ['GreedyDiscrete','GreedyContinuous']:
+                state_dict = torch.load(os.path.join(logdir,'model_'+str(i)+'.pt'))
+                A.load_state_dict(state_dict)   
 
     scores, episodes, t = [], [], time.time()
     for e in range(epochs):

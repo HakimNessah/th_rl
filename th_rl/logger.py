@@ -14,7 +14,7 @@ class Logger():
         D = config.copy()
         D.update({'id':self.id})
         c = pd.DataFrame.from_dict(D, orient='index')
-        c.to_csv(os.path.join(loc, 'dashboard.csv'), mode='a')
+        #c.to_csv(os.path.join(loc, 'dashboard.csv'), mode='a')
     
     def log(self, df):
         df.to_csv(self.loc)
