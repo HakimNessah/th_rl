@@ -1,9 +1,8 @@
 import numpy as np
 
 class PriceState():
-    def __init__(self, nactions, nstates, nplayers, cost,action_range=[0,1], a=10, b=1,  max_steps=1):
+    def __init__(self, nactions, nplayers, cost,action_range=[0,1], a=10, b=1,  max_steps=1):
         self.nactions = nactions
-        self.nstates = nstates
         self.nplayers = nplayers
         self.cost = cost
         self.action_range = action_range
@@ -17,10 +16,7 @@ class PriceState():
         return np.random.uniform(0, self.a)
     
     def encode(self):
-        if self.nstates>1:
-            return np.eye(self.nstates)[int((self.state-1e-9)/self.a*self.nstates)]
-        else:
-            return np.atleast_1d(self.state)
+        return np.atleast_1d(self.state)
 
     def scale_actions(self, actions):
         A = []
@@ -28,7 +24,7 @@ class PriceState():
             if nact>1:
                 A.append((self.a/self.b)*(act/(nact-1.)*(self.action_range[1]-self.action_range[0])+self.action_range[0]))
             else:
-                A.append( (self.a/self.b)*(1/(1+np.exp(-act))*(self.action_range[1]-self.action_range[0])+self.action_range[0]))
+                A.append((self.a/self.b)*(1/(1+np.exp(-act))*(self.action_range[1]-self.action_range[0])+self.action_range[0]))
         return np.array(A)
 
     def step(self, actions):

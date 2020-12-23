@@ -43,12 +43,8 @@ class Logger():
         for i in range(scenarios.shape[0]):
             action, reward = [],[]
             for j in range(100):
-                if labels[0]=='QTable':
-                    env.state = scenarios[[i]]/env.a;                    
-                    state = env.encode()
-                else:
-                    state = torch.from_numpy(scenarios[[i]]).float()
-                act = [agent.sample_action(state) for agent in agents]
+                act = [agent.sample_action(torch.from_numpy(scenarios[[i]]).float()) for agent in agents]
+                
                 if labels[0] in ['PPO','Reinforce']:
                     act = [a[0] for a in act]
                 env.reset()
@@ -59,8 +55,9 @@ class Logger():
             Actions.append(np.array(action))
         Actions = np.array(Actions).astype('float32')
         Rewards = np.array(Rewards)
+
         for i,L in enumerate(labels):
-            if L in ['TD3','SAC']:
+            if L in ['TD3','SAC','GreedyContinuous']:
                 Actions[:,:,i] = (1/(1+np.exp(-Actions[:,:,i])))*(env.action_range[1]-env.action_range[0])+env.action_range[0]
             else:
                 Actions[:,:,i] = Actions[:,:,i]/(env.nactions[i]-1.)*(env.action_range[1]-env.action_range[0])+env.action_range[0]
@@ -96,10 +93,7 @@ class Logger():
             for e in range(env.max_steps):
                 ep_r = 0    
                 # Get probabilities
-                if labels[0]=='QTable':
-                    S.append(np.argmax(state)*env.a/env.nstates)
-                else:
-                    S.append(state)
+                S.append(state)
                 action = [agent.sample_action(torch.from_numpy(state).float()) for agent in agents]
                 if labels[0] in ['PPO','Reinforce']:
                     action = [a[0] for a in action]
@@ -116,7 +110,7 @@ class Logger():
         Rewards = np.stack(Rewards,axis=1)
         States = np.stack(States,axis=1)
         for i,L in enumerate(labels):
-            if L in ['TD3','SAC']:
+            if L in ['TD3','SAC','GreedyContinuous']:
                 Actions[:,i,:] = (1/(1+np.exp(-Actions[:,i,:])))*(env.action_range[1]-env.action_range[0])+env.action_range[0]
             else:
                 Actions[:,i,:] = Actions[:,i,:]/(env.nactions[i]-1.)*(env.action_range[1]-env.action_range[0])+env.action_range[0]

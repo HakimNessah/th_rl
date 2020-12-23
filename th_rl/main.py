@@ -14,7 +14,7 @@ from th_rl.logger import *
 @click.option('--epochs', default=500, help='training epochs', type=int)
 @click.option('--max_steps', default=100, help='environment trajectory length.', type=int)
 @click.option('--greedy', default=0, help='number of greedy agents.',type=int)
-@click.option('--gamma', default=0.995, help='gamma', type=float)
+@click.option('--gamma', default='0.995', help='gamma', type=str)
 @click.option('--nactions', default=100, help='number of actions',type=int)
 @click.option('--nstates', default=1, help='number of actions',type=int)
 @click.option('--nplayers', default=3, help='number of players',type=int)
@@ -22,51 +22,55 @@ from th_rl.logger import *
 @click.option('--action_max', default=1., help='max action',type=float)
 @click.option('--load', default=0, help='Load pre-trained agents',type=int)
 @click.option('--print_freq', default=20, help='Print Frequency',type=int)
-@click.option('--batch_size', default=128, help='Print Frequency',type=int)
+@click.option('--batch_size', default=64, help='Print Frequency',type=int)
 @click.option('--eps_end', default=0.001, help='QTable min epsilon',type=float)
 @click.option('--id', default=''.join(random.choices(string.ascii_lowercase,k=8)) , help='scenario ID',type=str)
 def train(**config):
     globals().update(config)
-    
+
+    if ',' in config['gamma']:
+        gamma = config['gamma'].split(',')
+    else:
+        gamma = [config['gamma']]*nplayers
+
     if ',' in agent:
-        agents = []
-        nact = []
+        agents,nact,states = [],[],[],
         for ag in agent.split(','):
-            assert ag in ['SAC','ActorCritic'], 'Agent '+ag+' not implemented!'
             if ag=='SAC':
                 nact.append(1)
             else:
                 nact.append(nactions)
+            if ag=='QTable':
+                states.append(nstates)
+            else:
+                states.append(1)
             agents.append(ag)
             total_players = len(agents)
-            assert greedy==0, 'Greedy not implemented in mixed agents'
     else:
         agents = [agent]*nplayers
         nact = [nactions]*nplayers
         total_players = nplayers+greedy
+        nact = nact+[1]*greedy
+        states = [nstates]*nplayers
 
     environment = eval(env)(nactions=nact, 
-                            nstates=nstates, 
                             nplayers=total_players, 
                             cost = np.zeros((total_players)), 
                             action_range = [action_min,action_max], 
                             max_steps=max_steps)
 
-    agents = [eval(ag)(states=environment.encode().shape[-1], 
+    agents = [eval(ag)(states=ns, 
                           actions=na, 
-                          gamma=gamma,
+                          gamma=float(g),
+                          max_state = environment.a,
                           batch_size=batch_size,
-                          eps_step=1-10/epochs,
+                          eps_step=1-20/epochs,
                           epsilon=1.,
-                          eps_end=eps_end) for ag,na in zip(agents,nact)]
+                          eps_end=eps_end) for ag,na,ns,g in zip(agents,nact,states,gamma)]
     
     # Add Greedy Agents
     for _ in range(greedy):
-        assert nprices==1, 'Greedy not implemented in discrete price space'
-        if nactions>1:
-            agents.append(GreedyDiscrete(environment, agents[0].experience))
-        else:
-            agents.append(GreedyContinuous(environment, agents[0].experience))
+        agents.append(GreedyContinuous(environment, agents[0].experience))
 
     log = Logger(dir, config, id)
     if load:

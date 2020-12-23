@@ -41,6 +41,7 @@ class GreedyContinuous():
         self.memory = ReplayBuffer(1,self.experience)
         
     def sample_action(self, price):
+
         # Assumes other agents would play the same and he optimizes his action accordingly        
         others = 1-price/self.env.a-self.last_action
         new_action = np.clip((1-others)/2,self.collusion_action,self.monopole_action)
@@ -56,7 +57,7 @@ class GreedyContinuous():
 
 
 class QTable():
-    def __init__(self, states=16, actions=4, gamma=0.99, buffer='ReplayBuffer', capacity=500,
+    def __init__(self, states=16, actions=4, gamma=0.99, buffer='ReplayBuffer', capacity=500, max_state=10,
                 alpha=0.1, eps_end=2e-2, epsilon=0.5, eps_step=5e-4, **kwargs):
         self.table = 100/(1-gamma) + np.random.randn(states, actions) # np.zeros([states, actions])#
         self.gamma = gamma
@@ -65,11 +66,17 @@ class QTable():
         self.epsilon = epsilon
         self.eps_step = eps_step
         self.eps_end = eps_end
+        self.states = states
+        self.max_state = max_state
         self.experience = namedtuple('Experience', field_names=['state', 'action', 'reward','done', 'new_state'])
         self.memory = eval(buffer)(capacity,self.experience)
 
+    def encode(self,state):
+        return np.squeeze(np.eye(self.states)[(state*self.max_state/self.states).astype('int64')])
+
     def train_net(self):
         state, a, r, not_done, next_state = self.memory.replay()
+        state = self.encode(np.array(state))
         [actions,not_done,rewards] = [np.reshape(x,[-1]) for x in [a,not_done,r]]
         [state,next_state] = [np.argmax(s,axis=1) for s in [state, next_state]]
         old_value = self.table[state, actions]
@@ -87,11 +94,15 @@ class QTable():
         if random.uniform(0, 1) < self.epsilon:
             action = random.choice(self.action_space)
         else:
-            action = np.argmax(self.table[np.argmax(state)])
+            if isinstance(state, torch.Tensor):
+                st = state.numpy()
+            else:
+                st = state
+            action = np.argmax(self.table[np.argmax(self.encode(st))])
         return action
 
     def get_action(self, state):
-        return np.argmax(self.table[np.argmax(state)])
+        return np.argmax(self.table[np.argmax(self.encode(state))])
 
 class Reinforce(nn.Module):
     def __init__(self, states=4, actions=2,gamma=0.98, entropy=0, buffer='ReplayBuffer', capacity=50000, **kwargs):
@@ -397,9 +408,9 @@ class SAC(nn.Module):
                        q_learning_rate=0.001, 
                        tau=0.01, 
                        gamma=0.98, 
-                       batch_size=128,
+                       batch_size=64,
                        buffer='ReplayBuffer',
-                       capacity=50000,
+                       capacity=100000,
                        **kwargs):
         super(SAC, self).__init__()
         self.experience = namedtuple('Experience', field_names=['state', 'action', 'reward','done', 'new_state'])
