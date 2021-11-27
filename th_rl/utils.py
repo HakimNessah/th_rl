@@ -1,5 +1,5 @@
 import numpy
-from trainer import create_game
+from th_rl.trainer import create_game
 import os
 import pandas
 import click

@@ -1,6 +1,7 @@
 import click
 import os
-from trainer import train_one
+
+from th_rl.trainer import train_one
 
 @click.command()
 @click.option('--runs', default=2, help='Runs per config', type=int)
