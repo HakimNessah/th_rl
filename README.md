@@ -1,26 +1,48 @@
 # th_rl
 Pytorch-based package for multi-agent reinforcement learning in an iterated prisonner dilemma setting.
 
-<br> Application to electricity/power market dynamics.
-<br> All experiments stored in https://github.com/nikitcha/electricity_rl
+## Installation
+- in local mode:
+```
+git clone https://github.com/nikitcha/th_rl
+```
 
-## Agents
-- Discrete:
-    - QTable
-    - DQN
-    - Actor Critic
-    - PPO
-- Continuous    
-    - SAC
-    - TD3
+- install as module
+```
+pip install git+https://github.com/nikitcha/th_rl.git
+```
 
-## Multi-agent environments
-- State-Price (v)
-    - Discrete or continuous action spaces
-    - Discrete or continuous state (price) space
-    - Linear price as function of production
-- State-Action (x)
-    - Not implemented
+## Usage - training
+- Create a set of training configs and store them somewhere, i.e. /some_path/configs
+    -   Configs should follow the structured laid out in 'example_config.json'
+- Run training with the follwing command:
+    - This would run each config 20 times
+    - Result will be stored under /some_path/runs
 
-## Buffers
-- Standard replay buffer 
+
+```
+python main.py --cdir=/some_path/configs --runs=20  
+```
+
+Or if installed:
+
+```
+python -m th_rl.main.py --cdir=/some_path/configs --runs=20  
+```
+
+## Usage - plot results
+- To plot a single trajectory:
+```
+python utils.py --dir=/some_path/runs/qtable_001/1 --fun=plot_experiment
+```
+
+- To plot the mean of all [20] runs:
+```
+python utils.py --dir=/some_path/runs/qtable_001 --fun=plot_mean_result
+```
+
+Or if installed:
+
+```
+python -m th_rl.utils.py --dir=/some_path/runs/qtable_001 --fun=plot_mean_result
+```
