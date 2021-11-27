@@ -2,14 +2,21 @@
 Pytorch-based package for multi-agent reinforcement learning in an iterated prisonner dilemma setting.
 
 ## Installation
-- in local mode:
+- create python venv
+```
+python -m venv power_markets
+power_markets\scripts\activate
+```
+
+- install in local editable mode:
 ```
 git clone https://github.com/nikitcha/th_rl
+pip install -e th_rl
 ```
 
 - install as module from Github
 ```
-pip install git+https://github.com/nikitcha/th_rl.git
+pip install -U git+https://github.com/nikitcha/th_rl.git
 ```
 
 ## Usage - training
