@@ -19,7 +19,7 @@ pip install -e th_rl
 pip install -U git+https://github.com/nikitcha/th_rl.git
 ```
 
-- install dependencies:
+- if you want to install just dependencies:
 ```
 pip install -r th_rl/requirements.txt
 ```
