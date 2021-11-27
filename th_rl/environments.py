@@ -1,125 +1,52 @@
-import numpy as np
+import numpy 
 
-class PriceState():
-    def __init__(self, nactions, nplayers, cost,action_range=[0,1], a=10, b=1,  max_steps=1):
-        self.nactions = nactions
+
+class NoisyPriceState():
+    def __init__(self, nplayers, action_range=[0,1], a=10, b=1,  max_steps=1, noise_prob = 0.05, **kwargs):
         self.nplayers = nplayers
-        self.cost = cost
         self.action_range = action_range
         self.b = b
         self.a = a
         self.max_steps = max_steps
         self.state = self.sample_state()      
         self.episode = 0 
+        self.noise_prob = noise_prob
 
     def sample_state(self):
-        return np.random.uniform(0, self.a)
+        return numpy.random.uniform(0, self.a)
     
     def encode(self):
-        return np.atleast_1d(self.state)
+        return numpy.atleast_1d(self.state)
 
+    # Handles proper scaling for both discete and continuous action spaces
     def scale_actions(self, actions):
-        A = []
-        for act, nact in zip(actions, self.nactions):
-            if nact>1:
-                A.append((self.a/self.b)*(act/(nact-1.)*(self.action_range[1]-self.action_range[0])+self.action_range[0]))
-            else:
-                A.append((self.a/self.b)*(1/(1+np.exp(-act))*(self.action_range[1]-self.action_range[0])+self.action_range[0]))
-        return np.array(A)
+        return [self.a/self.b*a for a in actions]
 
     def step(self, actions):
         A = self.scale_actions(actions)
         Q = sum(A)
-        price = np.max([0,self.a - self.b*Q])
-        welfare = self.a * Q - 0.5 * self.b * Q**2 - sum([c*a for c,a in zip(self.cost,A)])
-        rewards = [(price-c)*a for c,a in zip(self.cost,A)]
+        price = numpy.max([0,self.a - self.b*Q])
+        if numpy.random.uniform(0,1)<self.noise_prob:
+            price = numpy.random.uniform(0,price)
+            
+        rewards = [price*a for a in A]
 
         self.state = price  
         self.episode += 1
         done = self.episode>=self.max_steps
-        return self.encode(), np.array(rewards), welfare, done 
+        return self.encode(), numpy.array(rewards), done 
     
     def get_optimal(self):
-        anash = (self.a/self.b)*np.ones(self.nplayers,)/(self.nplayers+1)
-        price = np.max([0,self.a - self.b*sum(anash)])
-        rnash = [(price-c)*a for c,a in zip(self.cost,anash)]        
-        acoll = (self.a/self.b)*0.5*np.ones(self.nplayers,)/self.nplayers
-        price = np.max([0,self.a - self.b*sum(acoll)])
-        rcoll = [(price-c)*a for c,a in zip(self.cost,acoll)]  
+        anash = (self.a/self.b)*numpy.ones(self.nplayers,)/(self.nplayers+1)
+        price = numpy.max([0,self.a - self.b*sum(anash)])
+        rnash = [price*a for a in anash]
+        acoll = (self.a/self.b)*0.5*numpy.ones(self.nplayers,)/self.nplayers
+        price = numpy.max([0,self.a - self.b*sum(acoll)])
+        rcoll = [price*a for a in acoll]  
         return sum(rnash), sum(rcoll)
 
     def reset(self):
         self.episode = 0
         self.state = self.sample_state()
-        return self.encode()
+        return self.encode()        
 
-'''
-class ActionState():
-    def __init__(self, nactions, nplayers, cost,action_range=[0,1], a=10, b=1,  max_steps=1, discrete_actions=True, encoder='none'):
-        assert 0==1, 'Not Implemented!'
-        self.nactions = nactions
-        self.nplayers = nplayers
-        self.cost = cost
-        self.action_range = action_range
-        self.b = b
-        self.a = a
-        self.max_steps = max_steps
-        self.discrete_actions = discrete_actions                
-        self.state = self.sample_state()      
-        self.episode = 0 
-        self.encoder = encoder
-        if not discrete_actions:
-            assert action_range==[0,1], 'In continuous action space range is assumed to be [0,1]'
-
-    def encode(self):
-        if self.discrete_actions:
-            if self.encoder=='none':
-                state = np.array(self.state)
-            if self.encoder=='one_hot':
-                state = np.eye(self.nactions)[self.state]
-            if self.encoder=='full_one_hot':
-                act = sum([a*self.nactions**i for i,a in enumerate(self.state)])
-                state = np.eye(self.nactions**len(self.state))[act]
-            return np.reshape(state,(1,-1))
-        return np.array(self.state)
-
-    def sample_state(self):
-        if self.discrete_actions:
-            state = np.random.randint(0,self.nactions, self.nplayers)
-        else:
-            state = np.random.uniform(self.action_range[0],self.action_range[1], self.nplayers)
-        return state
-    
-    def scale_actions(self, actions):
-        A = np.array(actions)
-        if self.discrete_actions:
-            return (self.a/self.b)*(A/(self.nactions-1.)*(self.action_range[1]-self.action_range[0])+self.action_range[0])
-        else:
-            return (self.a/self.b)*(1/(1+np.exp(-A))*(self.action_range[1]-self.action_range[0])+self.action_range[0])
-
-    def step(self, actions):
-        A = self.scale_actions(actions)
-        Q = sum(A)
-        price = np.max([0,self.a - self.b*Q])
-        welfare = self.a * Q - 0.5 * self.b * Q**2 - sum([c*a for c,a in zip(self.cost,A)])
-        rewards = [(price-c)*a for c,a in zip(self.cost,A)]
-
-        self.state = actions  
-        self.episode += 1
-        done = self.episode>=self.max_steps
-        return np.atleast_1d(self.state), np.array(rewards), welfare, done 
-    
-    def get_optimal(self):
-        anash = (self.a/self.b)*np.ones(self.nplayers,)/(self.nplayers+1)
-        price = np.max([0,self.a - self.b*sum(anash)])
-        rnash = [(price-c)*a for c,a in zip(self.cost,anash)]        
-        acoll = (self.a/self.b)*0.5*np.ones(self.nplayers,)/self.nplayers
-        price = np.max([0,self.a - self.b*sum(acoll)])
-        rcoll = [(price-c)*a for c,a in zip(self.cost,acoll)]  
-        return sum(rnash), sum(rcoll)
-
-    def reset(self):
-        self.episode = 0
-        self.state = self.sample_state()
-        return self.encode()      
-'''        

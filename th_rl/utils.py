@@ -1,103 +1,99 @@
-import pandas as pd
+import numpy
+from trainer import create_game
 import os
+import pandas
+import click
 
-from th_rl.agents import *
-from th_rl.environments import *
-from th_rl.logger import *
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
-def load_scenarios():
-    filepath = os.path.realpath(__file__)
-    csvpath = os.path.join(os.path.dirname(filepath), 'scenarios.csv')
-    return pd.read_csv(csvpath)
+def load_experiment(loc):
+    cpath  = os.path.join(loc, 'config.json')
+    config, agents, environment = create_game(cpath)
+    for i,agent in enumerate(agents):
+        agent.load(os.path.join(loc,str(i)))
+    return config, agents, environment
 
+def play_game(agents, environment, iters=1):
+    rewards,actions = [],[]
+    for i in range(iters):
+        done = False
+        state = environment.reset()
+        next_state = state
+        while not done:
+            # choose actions 
+            acts = [ agent.get_action(next_state) for agent in agents]
+            #acts = [ agent.sample_action(torch.from_numpy(next_state).float()) for agent in agents]
+            scaled_acts = [agent.scale(act) for agent, act in zip(agents, acts)]
+            
+            # Step through environment
+            next_state, reward, done = environment.step(scaled_acts)
+            rewards.append(reward)
+            actions.append(scaled_acts)
 
-def load_experience(id,edir = r'C:\Users\niki\Source\electricity_rl\Experiments'):   
-    config = load_scenarios().iloc[id].to_dict()
-    config.update({'batch_size':128,'gamma':'0.995', 'dir':r'C:\Users\niki\Source\electricity_rl\Experiments','env':'PriceState'})
-    globals().update(**config)
-      
-    if ',' in config['gamma']:
-        gamma = config['gamma'].split(',')
+    return numpy.array(actions), numpy.array(rewards)
+
+def plot_matrix(x,y,z,title='',xlabel='Actions',ylabel='States',zlabel='Values'):
+    fig = go.Figure()
+    fig.add_trace(go.Surface(z=z, x=x,y=y))
+    fig.update_layout(scene = dict(
+                        xaxis_title=xlabel,
+                        yaxis_title=ylabel,
+                        zaxis_title=zlabel),
+                        title=title,
+                        width=700,
+                        height = 600,
+                        margin=dict(r=20, b=10, l=10, t=30))
+    fig.show()
+
+def plot_qagent(agent, title='',field='value'):
+    if field=='value':
+        z = agent.table
     else:
-        gamma = [config['gamma']]*nplayers
+        z = agent.counter
+    
+    y = numpy.arange(0,agent.states)/agent.states*agent.max_state
+    x = agent.action_range[0]+agent.action_space/agent.actions*(agent.action_range[1]-agent.action_range[0])
+    plot_matrix(x,y,z,title=title)
 
-    if ',' in agent:
-        agents,nact,states = [],[],[],
-        for ag in agent.split(','):
-            if ag=='SAC':
-                nact.append(1)
-            else:
-                nact.append(nactions)
-            if ag=='QTable':
-                states.append(nstates)
-            else:
-                states.append(1)
-            agents.append(ag)
-            total_players = len(agents)
-    else:
-        agents = [agent]*nplayers
-        nact = [nactions]*nplayers
-        total_players = nplayers+greedy
-        nact = nact+[1]*greedy
-        states = [nstates]*nplayers
+def plot_trajectory(actions, rewards, title=''):
+    rpd = pandas.DataFrame(data = rewards, columns=numpy.arange(actions.shape[1]))
+    apd = pandas.DataFrame(data = actions, columns=numpy.arange(actions.shape[1]))
+    rpd['Total'] = rpd.sum(axis=1)
+    rpd['Nash'] = 22.22
+    rpd['Cartel'] = 25
 
-    environment = eval(env)(nactions=nact, 
-                            nplayers=total_players, 
-                            cost = np.zeros((total_players)), 
-                            action_range = [action_min,action_max], 
-                            max_steps=max_steps)
-
-    agents = [eval(ag)(states=ns, 
-                          actions=na, 
-                          gamma=float(g),
-                          max_state = environment.a,
-                          batch_size=batch_size,
-                          eps_step=1-20/epochs,
-                          epsilon=eps_end,
-                          eps_end=eps_end) for ag,na,ns,g in zip(agents,nact,states,gamma)]
-
-    # Add Greedy Agents
-    for _ in range(greedy):
-        agents.append(GreedyContinuous(environment, agents[0].experience))    
-
-    logdir = os.path.join(dir, str(id))
-    # Load Pre-Trained models
-    for i,A in enumerate(agents):
-        if A.__class__.__name__ in ['QTable']:
-            table = pd.read_csv(os.path.join(logdir,'model_'+str(i)+'.csv'))
-            A.table = table.values
-        elif not A.__class__.__name__ in ['GreedyDiscrete','GreedyContinuous']:
-            state_dict = torch.load(os.path.join(logdir,'model_'+str(i)+'.pt'))
-            A.load_state_dict(state_dict)       
-
-    return environment, agents
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True,vertical_spacing=0.1, subplot_titles=("Rewards", "Actions"))
+    for col in rpd.columns:
+        fig.add_trace(go.Scatter(x=rpd.index.values, y=rpd[col].values, name='Reward {}'.format(col)),row=1, col=1)
+    for col in apd.columns:
+        fig.add_trace(go.Scatter(x=rpd.index.values, y=rpd[col].values, name='Action {}'.format(col)),row=2, col=1)
+    fig.update_layout(height=600, width=600, title_text=title)
+    fig.show()    
 
 
-def sample_trajectory(env, agents, init_state = []):
-    labels = [a.__class__.__name__ for a in agents]
-    if not init_state:
-        state = env.reset()
-    else:
-        state = init_state
-    A, R, S = [],[],[]
-    for e in range(env.max_steps):
-        ep_r = 0    
-        # Get probabilities
-        S.append(state)
-        action = [agent.sample_action(torch.from_numpy(state).float()) for agent in agents]
-        if labels[0] in ['PPO','Reinforce']:
-            action = [a[0] for a in action]
-        next_state, reward, welfare, done = env.step(action)
-        state = next_state
-        A.append(np.array(action))
-        R.append(reward)
-    Actions = np.array(A)
-    Rewards = np.array(R)
-    States = np.array(S)
+def plot_experiment(loc):
+    config, agents, environment = load_experiment(loc)
+    rewards, actions = play_game(agents, environment)
+    plot_trajectory(rewards,actions,loc)
 
-    for i,L in enumerate(labels):
-        if L in ['TD3','SAC','GreedyContinuous']:
-            Actions[:,i] = (1/(1+np.exp(-Actions[:,i])))*(env.action_range[1]-env.action_range[0])+env.action_range[0]
-        else:
-            Actions[:,i] = Actions[:,i]/(env.nactions[i]-1.)*(env.action_range[1]-env.action_range[0])+env.action_range[0]
-    return Rewards, Actions, States
+def plot_mean_result(loc):
+    expi = os.listdir(loc)
+    rewards, actions = 0,0
+    for exp in expi:
+        config, agents, environment = load_experiment(os.path.join(loc,exp))
+        acts, rwds = play_game(agents, environment)   
+        rewards += rwds
+        actions += acts
+    plot_trajectory(actions/len(expi), rewards/len(expi), title=loc)
+
+
+
+@click.command()
+@click.option('--dir', help='Experiment dir', type=str)
+@click.option('--fun', default='plot_mean_result',help='Experiment dir', type=str)
+def main(**params):
+    eval(params['fun'])(params['dir'])
+
+if __name__=='__main__':
+    main()

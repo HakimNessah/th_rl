@@ -1,6 +1,6 @@
-import numpy as np
+from collections import deque
+import numpy
 import torch
-from collections import namedtuple, deque
 
 class ReplayBuffer():
     def __init__(self, capacity, experience):
@@ -24,12 +24,15 @@ class ReplayBuffer():
             output = (torch.tensor(t, dtype=dt) for t,dt in zip(output,cast))              
         return output
     
-    def replay(self, cast=None):
-        indices = np.arange(0, len(self.buffer))
+    def replay(self, cast=None, replay_size=0):
+        if replay_size==0:
+            indices = numpy.arange(0, len(self.buffer))
+        else:
+            indices = numpy.arange(len(self.buffer)-replay_size, len(self.buffer))
         output = zip(*[self.buffer[idx] for idx in indices])
         if cast:
             output = (torch.tensor(t, dtype=dt) for t,dt in zip(output,cast))         
         return output     
 
     def empty(self):
-        self.buffer = deque(maxlen=self.capacity)
+        self.buffer = deque(maxlen=self.capacity)   
