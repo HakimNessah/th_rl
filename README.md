@@ -7,10 +7,9 @@ Pytorch-based package for multi-agent reinforcement learning in an iterated pris
 git clone https://github.com/nikitcha/th_rl
 ```
 
-- install as module (navigate to source folder)
+- install as module from Github
 ```
-pip install -r /th_rl/requirements.txt
-pip install th_rl
+pip install git+https://github.com/nikitcha/th_rl.git
 ```
 
 ## Usage - training
