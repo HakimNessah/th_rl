@@ -19,6 +19,11 @@ pip install -e th_rl
 pip install -U git+https://github.com/nikitcha/th_rl.git
 ```
 
+- install dependencies:
+```
+pip install -r th_rl/requirements.txt
+```
+
 ## Usage - training
 - Create a set of training configs and store them somewhere, i.e. /some_path/configs
     -   Configs should follow the structured laid out in 'example_config.json'
