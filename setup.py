@@ -8,10 +8,10 @@ setup(name='th_rl',
       license='MIT',
       packages=['th_rl'],
       install_requires=[
-        "click==7.1.2",
-        "numpy==1.19.4",
-        "pandas==1.3.4",
-        "plotly==5.4.0",
-        "torch==1.10.0"
+        "click",
+        "numpy",
+        "pandas",
+        "plotly",
+        "torch"
       ],      
       zip_safe=False)
