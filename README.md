@@ -2,7 +2,7 @@
 Pytorch-based package for multi-agent reinforcement learning in an iterated prisonner dilemma setting.
 
 ## Installation
-- create python venv
+- create python venv 
 ```
 python -m venv power_markets
 power_markets\scripts\activate
