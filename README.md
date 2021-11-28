@@ -56,5 +56,5 @@ python utils.py --dir=/some_path/runs/qtable_001 --fun=plot_mean_result
 Or if installed:
 
 ```
-python -m th_rl.utils.py --dir=/some_path/runs/qtable_001 --fun=plot_mean_result
+python -m th_rl.utils --dir=/some_path/runs/qtable_001 --fun=plot_mean_result
 ```
