@@ -87,11 +87,18 @@ def plot_mean_result(loc):
         actions += acts
     plot_trajectory(actions/len(expi), rewards/len(expi), title=loc)
 
+def plot_visits(loc):
+    config, agents, environment = load_experiment(loc)
+    [plot_qagent(a,loc, 'counter') for a in agents]
 
+def plot_values(loc):
+    config, agents, environment = load_experiment(loc)
+    [plot_qagent(a,loc, 'counter') for a in agents]
 
 @click.command()
 @click.option('--dir', help='Experiment dir', type=str)
 @click.option('--fun', default='plot_mean_result',help='Experiment dir', type=str)
+
 def main(**params):
     eval(params['fun'])(params['dir'])
 

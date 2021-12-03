@@ -25,9 +25,9 @@ class NoisyPriceState():
     def step(self, actions):
         A = self.scale_actions(actions)
         Q = sum(A)
-        price = numpy.max([0,self.a - self.b*Q])
         if numpy.random.uniform(0,1)<self.noise_prob:
-            price = numpy.random.uniform(0,price)
+            new_a = numpy.random.uniform(self.a*0.7, self.a)
+        price = numpy.max([0,new_a - self.b*Q])
             
         rewards = [price*a for a in A]
 
