@@ -6,6 +6,7 @@ import click
 
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import plotly.express as px
 
 def load_experiment(loc):
     cpath  = os.path.join(loc, 'config.json')
@@ -87,13 +88,33 @@ def plot_mean_result(loc):
         actions += acts
     plot_trajectory(actions/len(expi), rewards/len(expi), title=loc)
 
+def plot_mean_conf(loc):
+    expi = os.listdir(loc)
+    rewards, actions = [],[]
+    for exp in expi:
+        config, agents, environment = load_experiment(os.path.join(loc,exp))
+        acts, rwds = play_game(agents, environment)   
+        rewards.append(numpy.sum(rwds,axis=1))
+        actions.append(acts)
+    rewards = pandas.DataFrame(data=numpy.stack(rewards,axis=0))
+    rewards = rewards.ewm(halflife=5,axis=1, min_periods=0).mean()
+    plotdata = pandas.DataFrame()
+    plotdata['median'] = rewards.quantile(0.5,axis=0)
+    plotdata['75th'] = rewards.quantile(0.75,axis=0)
+    plotdata['25th'] = rewards.quantile(0.25,axis=0)
+    plotdata['Nash'] = 22.22
+    plotdata['Cartel'] = 25    
+    fig = px.line(plotdata, width=500, height=500, title=os.path.basename(loc))
+    fig.update_yaxes(range = [10,25])
+    fig.show()
+
 def plot_visits(loc):
     config, agents, environment = load_experiment(loc)
     [plot_qagent(a,loc, 'counter') for a in agents]
 
 def plot_values(loc):
     config, agents, environment = load_experiment(loc)
-    [plot_qagent(a,loc, 'counter') for a in agents]
+    [plot_qagent(a,loc, 'value') for a in agents]
 
 @click.command()
 @click.option('--dir', help='Experiment dir', type=str)

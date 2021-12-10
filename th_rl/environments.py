@@ -27,6 +27,8 @@ class NoisyPriceState():
         Q = sum(A)
         if numpy.random.uniform(0,1)<self.noise_prob:
             new_a = numpy.random.uniform(self.a*0.7, self.a)
+        else:
+            new_a = self.a
         price = numpy.max([0,new_a - self.b*Q])
             
         rewards = [price*a for a in A]
