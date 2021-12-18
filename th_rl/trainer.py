@@ -25,7 +25,8 @@ def create_game(configpath):
 def train_one(
         exp_path,
         configpath,
-        loadonly=False
+        loadonly=False,
+        print_eps = False
     ):
     # Handle home location
     if not os.path.exists(exp_path):
@@ -48,7 +49,7 @@ def train_one(
         state = environment.reset()
         while not done:
             # choose actions 
-            acts = [ agent.sample_action(torch.from_numpy(state).float()) for agent in agents]
+            acts = [ agent.sample_action(torch.from_numpy(state.astype('float32'))) for agent in agents]
             scaled_acts = [agent.scale(act) for agent, act in zip(agents, acts)]
 
             # Step through environment
@@ -75,13 +76,21 @@ def train_one(
         if not (e+1)%print_freq:
             rew = numpy.mean(rewards_log[e-print_freq+1:e+1,:],axis=0)
             act = numpy.mean(actions_log[e-print_freq+1:e+1,:],axis=0)
-            print("eps:{} | time:{:2.2f} | episode:{:3d} | reward:{} | agents:{} | actions:{}".format(
+            if print_eps:
+                print("eps:{} | time:{:2.2f} | episode:{:3d} | reward:{} | agents:{} | actions:{}".format(
                 numpy.round(numpy.array([a.epsilon for a in agents])*1000)/1000, 
                 time.time()-t,e,
                 numpy.round(100*rew)/100,
                 ','.join([a['name'] for a in config['agents']]),
                 numpy.round(100*act)/100)                
                 )
+            else:
+                print("time:{:2.2f} | episode:{:3d} | reward:{} | agents:{} | actions:{}".format(
+                time.time()-t,e,
+                numpy.round(100*rew)/100,
+                ','.join([a['name'] for a in config['agents']]),
+                numpy.round(100*act)/100)                
+                )                
             t = time.time()
     
     # Store result

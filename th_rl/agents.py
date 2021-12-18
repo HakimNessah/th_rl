@@ -8,7 +8,6 @@ import torch.optim as optim
 from torch.distributions import Categorical
 from th_rl.buffers import *
 
-
 class QTable():
     def __init__(self, states=16, actions=4, action_range=[0,1], gamma=0.99, buffer='ReplayBuffer', capacity=500, max_state=10,
                 alpha=0.1, eps_end=2e-2, epsilon=0.5, eps_step=5e-4, **kwargs):
@@ -121,14 +120,13 @@ class A2C(nn.Module):
         return m.sample().item()
 
     def get_action(self, state):
-        pi = self.pi(state)
+        pi = self.pi(torch.tensor(state.astype('float32')))
         m = torch.argmax(pi)
         return m.item()
 
     def train_net(self):
         states, actions, rewards, done, s_prime = self.memory.replay(self.cast)      
         [actions,done,rewards] = [torch.reshape(x,[-1,1]) for x in [actions,done,rewards]]        
-
         pi = self.pi(states, softmax_dim=1)
         pi_prime = self.pi(s_prime, softmax_dim=1)
         dist = Categorical(probs=pi)
@@ -162,7 +160,7 @@ class A2C(nn.Module):
         self.fc_pi.reset_parameters()  
 
     def save(self,loc):
-        torch.save(self.state_dict(), loc)
+        torch.save(self.state_dict(),loc)
 
     def load(self, loc):
-        self.load_state_dict(loc)
+        self.load_state_dict(torch.load(loc))

@@ -3,7 +3,7 @@ from th_rl.trainer import create_game
 import os
 import pandas
 import click
-
+import torch
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
@@ -115,6 +115,29 @@ def plot_visits(loc):
 def plot_values(loc):
     config, agents, environment = load_experiment(loc)
     [plot_qagent(a,loc, 'value') for a in agents]
+
+
+def plot_sweep_conf(loc):
+    ptiles = []
+    for iloc in os.listdir(loc):
+        exp_loc = os.path.join(loc,iloc)
+        rewards = []
+        for exp in os.listdir(exp_loc):
+            config, agents, environment = load_experiment(os.path.join(exp_loc,exp))
+            acts, rwds = play_game(agents, environment)   
+            rewards.append(numpy.sum(rwds,axis=1))
+        rewards = numpy.stack(rewards,axis=0)
+        pt =  numpy.percentile(rewards,50,axis=1)
+        ptiles.append([numpy.percentile(pt,p) for p in [25,50,75]])
+    plotdata = pandas.DataFrame(data=ptiles, columns=['25th','median','75th'])
+    plotdata['Nash'] = 22.22
+    plotdata['Cartel'] = 25
+    fig = px.line(plotdata, width=500, height=500, title=os.path.basename(loc))
+    fig.update_yaxes(range = [10,25])
+    fig.show()
+
+def calc_discount_nash(discount, freq):
+    return 22.22222*(freq*(1+(1-discount)+(1-discount)**2)/3 + (1-freq))
 
 @click.command()
 @click.option('--dir', help='Experiment dir', type=str)

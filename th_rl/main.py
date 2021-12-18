@@ -10,7 +10,6 @@ def main(**params):
     home = os.path.join(os.path.abspath(params['cdir']),'..','runs')
     if not os.path.exists(home):
         os.mkdir(home)
-
     for confname in os.listdir(params['cdir']):
         cpath = os.path.join(home, confname.replace('.json',''))
         if confname.replace('.json','') not in os.listdir(home):
