@@ -72,6 +72,59 @@ def plot_trajectory(actions, rewards, title=''):
     fig.update_layout(height=600, width=600, title_text=title)
     fig.show()    
 
+def plot_learning_curve(loc):
+    log = pandas.read_csv(os.path.join(loc,'log.csv'))
+    rewards = log[['rewards','rewards.1']].ewm(halflife=1000).mean()
+    actions = log[['actions','actions.1']].ewm(halflife=1000).mean()
+    plot_trajectory(actions.values, rewards.values, title=os.path.basename(loc))
+
+def plot_learning_curve_conf(loc):
+    rewards = []
+    for f in os.listdir(loc):
+        log = pandas.read_csv(os.path.join(loc,f,'log.csv'))
+        rewards.append(log[['rewards','rewards.1']].ewm(halflife=1000).mean().sum(axis=1))
+    rewards = pandas.concat(rewards,axis=1)
+    plotdata = pandas.DataFrame()
+    plotdata['median'] = rewards.quantile(0.5,axis=1)
+    plotdata['75th'] = rewards.quantile(0.75,axis=1)
+    plotdata['25th'] = rewards.quantile(0.25,axis=1)
+    plotdata['Nash'] = 22.22
+    plotdata['Cartel'] = 25    
+    fig = px.line(plotdata, width=500, height=500, title=os.path.basename(loc))
+    fig.update_yaxes(range = [10,25])
+    fig.show()
+
+
+def plot_learning_curve_sweep(loc):
+    plotdata = pandas.DataFrame()
+    for e in os.listdir(loc):
+        rewards = []
+        for f in os.listdir(os.path.join(loc,e)):
+            log = pandas.read_csv(os.path.join(loc,e,f,'log.csv'))
+            rewards.append(log[['rewards','rewards.1']].ewm(halflife=1000).mean().sum(axis=1))
+        rewards = pandas.concat(rewards,axis=1)
+        plotdata[e+'-median'] = rewards.quantile(0.5,axis=1)
+        #plotdata[e+'-75th'] = rewards.quantile(0.75,axis=1)
+        #plotdata[e+'-25th'] = rewards.quantile(0.25,axis=1)
+    plotdata['Nash'] = 22.22
+    plotdata['Cartel'] = 25    
+    fig = px.line(plotdata, width=500, height=500, title='Learning Curve '+os.path.basename(loc))
+    fig.update_yaxes(range = [10,25])
+    #  position legends inside a plot
+    fig.update_layout(
+        legend=dict(
+            x=0.3,  # value must be between 0 to 1.
+            y=0.02,   # value must be between 0 to 1.
+            traceorder="normal",
+            font=dict(
+                family="sans-serif",
+                size=10,
+                color="black"
+            ),
+        )
+    )    
+    fig.show()
+
 
 def plot_experiment(loc):
     config, agents, environment = load_experiment(loc)
@@ -86,7 +139,7 @@ def plot_mean_result(loc):
         acts, rwds = play_game(agents, environment)   
         rewards += rwds
         actions += acts
-    plot_trajectory(actions/len(expi), rewards/len(expi), title=loc)
+    plot_trajectory(actions/len(expi), rewards/len(expi), title=os.path.basename(loc))
 
 def plot_mean_conf(loc):
     expi = os.listdir(loc)
