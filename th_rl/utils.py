@@ -202,6 +202,7 @@ def plot_sweep_conf(loc,return_fig=False):
         return fig
     fig.show()
 
+
 def calc_discount_nash(discount, freq):
     return 22.22222*(freq*(1+(1-discount)+(1-discount)**2)/3 + (1-freq))
 
