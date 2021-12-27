@@ -34,7 +34,7 @@ def play_game(agents, environment, iters=1):
 
     return numpy.array(actions), numpy.array(rewards)
 
-def plot_matrix(x,y,z,title='',xlabel='Actions',ylabel='States',zlabel='Values'):
+def plot_matrix(x,y,z,title='',xlabel='Actions',ylabel='States',zlabel='Values',return_fig=False):
     fig = go.Figure()
     fig.add_trace(go.Surface(z=z, x=x,y=y))
     fig.update_layout(scene = dict(
@@ -45,9 +45,11 @@ def plot_matrix(x,y,z,title='',xlabel='Actions',ylabel='States',zlabel='Values')
                         width=700,
                         height = 600,
                         margin=dict(r=20, b=10, l=10, t=30))
+    if return_fig:
+        return fig
     fig.show()
 
-def plot_qagent(agent, title='',field='value'):
+def plot_qagent(agent, title='',field='value', return_fig=False):
     if field=='value':
         z = agent.table
     else:
@@ -55,9 +57,9 @@ def plot_qagent(agent, title='',field='value'):
     
     y = numpy.arange(0,agent.states)/agent.states*agent.max_state
     x = agent.action_range[0]+agent.action_space/agent.actions*(agent.action_range[1]-agent.action_range[0])
-    plot_matrix(x,y,z,title=title)
+    return plot_matrix(x,y,z,title=title, return_fig=return_fig)
 
-def plot_trajectory(actions, rewards, title=''):
+def plot_trajectory(actions, rewards, title='', return_fig=False):
     rpd = pandas.DataFrame(data = rewards, columns=numpy.arange(actions.shape[1]))
     apd = pandas.DataFrame(data = actions, columns=numpy.arange(actions.shape[1]))
     rpd['Total'] = rpd.sum(axis=1)
@@ -70,15 +72,18 @@ def plot_trajectory(actions, rewards, title=''):
     for col in apd.columns:
         fig.add_trace(go.Scatter(x=rpd.index.values, y=rpd[col].values, name='Action {}'.format(col)),row=2, col=1)
     fig.update_layout(height=600, width=600, title_text=title)
+    if return_fig:
+        return fig
     fig.show()    
 
-def plot_learning_curve(loc):
+def plot_learning_curve(loc, return_fig=False):
     log = pandas.read_csv(os.path.join(loc,'log.csv'))
     rewards = log[['rewards','rewards.1']].ewm(halflife=1000).mean()
     actions = log[['actions','actions.1']].ewm(halflife=1000).mean()
-    plot_trajectory(actions.values, rewards.values, title=os.path.basename(loc))
+    fig = plot_trajectory(actions.values, rewards.values, title=os.path.basename(loc), return_fig=return_fig)
+    return fig
 
-def plot_learning_curve_conf(loc):
+def plot_learning_curve_conf(loc, return_fig=False):
     rewards = []
     for f in os.listdir(loc):
         log = pandas.read_csv(os.path.join(loc,f,'log.csv'))
@@ -92,10 +97,12 @@ def plot_learning_curve_conf(loc):
     plotdata['Cartel'] = 25    
     fig = px.line(plotdata, width=500, height=500, title=os.path.basename(loc))
     fig.update_yaxes(range = [10,25])
+    if return_fig:
+        return fig
     fig.show()
 
 
-def plot_learning_curve_sweep(loc):
+def plot_learning_curve_sweep(loc, return_fig=False):
     plotdata = pandas.DataFrame()
     for e in os.listdir(loc):
         rewards = []
@@ -123,15 +130,17 @@ def plot_learning_curve_sweep(loc):
             ),
         )
     )    
+    if return_fig:
+        return fig
     fig.show()
 
 
-def plot_experiment(loc):
+def plot_experiment(loc,return_fig=False):
     config, agents, environment = load_experiment(loc)
     rewards, actions = play_game(agents, environment)
-    plot_trajectory(rewards,actions,loc)
+    return plot_trajectory(rewards,actions,loc,return_fig)
 
-def plot_mean_result(loc):
+def plot_mean_result(loc,return_fig=False):
     expi = os.listdir(loc)
     rewards, actions = 0,0
     for exp in expi:
@@ -139,9 +148,9 @@ def plot_mean_result(loc):
         acts, rwds = play_game(agents, environment)   
         rewards += rwds
         actions += acts
-    plot_trajectory(actions/len(expi), rewards/len(expi), title=os.path.basename(loc))
+    return plot_trajectory(actions/len(expi), rewards/len(expi), title=os.path.basename(loc), return_fig=return_fig)
 
-def plot_mean_conf(loc):
+def plot_mean_conf(loc,return_fig=False):
     expi = os.listdir(loc)
     rewards, actions = [],[]
     for exp in expi:
@@ -159,18 +168,20 @@ def plot_mean_conf(loc):
     plotdata['Cartel'] = 25    
     fig = px.line(plotdata, width=500, height=500, title=os.path.basename(loc))
     fig.update_yaxes(range = [10,25])
+    if return_fig:
+        return fig
     fig.show()
 
-def plot_visits(loc):
+def plot_visits(loc,return_fig=False):
     config, agents, environment = load_experiment(loc)
-    [plot_qagent(a,loc, 'counter') for a in agents]
+    return [plot_qagent(a,loc, 'counter', return_fig=return_fig) for a in agents]
 
-def plot_values(loc):
+def plot_values(loc,return_fig=False):
     config, agents, environment = load_experiment(loc)
-    [plot_qagent(a,loc, 'value') for a in agents]
+    return [plot_qagent(a,loc, 'value',return_fig=return_fig) for a in agents]
 
 
-def plot_sweep_conf(loc):
+def plot_sweep_conf(loc,return_fig=False):
     ptiles = []
     for iloc in os.listdir(loc):
         exp_loc = os.path.join(loc,iloc)
@@ -187,6 +198,8 @@ def plot_sweep_conf(loc):
     plotdata['Cartel'] = 25
     fig = px.line(plotdata, width=500, height=500, title=os.path.basename(loc))
     fig.update_yaxes(range = [10,25])
+    if return_fig:
+        return fig
     fig.show()
 
 def calc_discount_nash(discount, freq):

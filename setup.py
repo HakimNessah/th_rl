@@ -12,6 +12,7 @@ setup(name='th_rl',
         "numpy",
         "pandas",
         "plotly",
-        "torch"
+        "torch",
+        "streamlit"
       ],      
       zip_safe=False)
