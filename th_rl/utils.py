@@ -196,6 +196,7 @@ def plot_sweep_conf(loc,return_fig=False):
     plotdata = pandas.DataFrame(data=ptiles, columns=['25th','median','75th'])
     plotdata['Nash'] = 22.22
     plotdata['Cartel'] = 25
+    plotdata.index = os.listdir(loc)
     fig = px.line(plotdata, width=500, height=500, title=os.path.basename(loc))
     fig.update_yaxes(range = [10,25])
     if return_fig:

@@ -11,15 +11,16 @@ def main(**params):
     if not os.path.exists(home):
         os.mkdir(home)
     for confname in os.listdir(params['dir']):
-        cpath = os.path.join(home, confname.replace('.json',''))
-        if confname.replace('.json','') not in os.listdir(home):
-            if not os.path.exists(cpath):
-                os.mkdir(cpath)
-            for i in range(params['runs']):
-                exp_path = os.path.join(cpath, str(i))
-                train_one(exp_path, os.path.join(params['dir'],confname))
-            else:
-                print('Skipping {}'.format(confname))
+        if '.json' in confname:
+            cpath = os.path.join(home, confname.replace('.json',''))
+            if confname.replace('.json','') not in os.listdir(home):
+                if not os.path.exists(cpath):
+                    os.mkdir(cpath)
+                for i in range(params['runs']):
+                    exp_path = os.path.join(cpath, str(i))
+                    train_one(exp_path, os.path.join(params['dir'],confname))
+                else:
+                    print('Skipping {}'.format(confname))
 
 if __name__=='__main__':
     main()

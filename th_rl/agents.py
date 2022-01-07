@@ -10,7 +10,7 @@ from th_rl.buffers import *
 
 class QTable():
     def __init__(self, states=16, actions=4, action_range=[0,1], gamma=0.99, buffer='ReplayBuffer', capacity=500, max_state=10,
-                alpha=0.1, eps_end=2e-2, epsilon=0.5, eps_step=5e-4, **kwargs):
+                alpha=0.1, eps_end=2e-2, epsilon=0.5, eps_step=5e-4,min_memory=100, **kwargs):
         self.table =  1/gamma+numpy.random.randn(states+1, actions)
         self.gamma = gamma
         self.alpha = alpha
@@ -22,6 +22,7 @@ class QTable():
         self.eps_end = eps_end
         self.states = states
         self.max_state = max_state
+        self.min_memory = min_memory
         self.experience = namedtuple('Experience', field_names=['state', 'action', 'reward','done', 'new_state'])
         self.memory = eval(buffer)(capacity,self.experience)
         self.counter = 0*self.table
@@ -34,19 +35,18 @@ class QTable():
         return actions/(self.actions-1.)*(self.action_range[1]-self.action_range[0])+self.action_range[0]
 
     def train_net(self):
-        price, acts, rwrd, not_done, next_state = self.memory.replay()
-        state = self.encode(numpy.array(price))[:,0]
-        [actions,not_done,rewards] = [numpy.reshape(x,[-1]) for x in [acts,not_done,rwrd]]
-        next_state = self.encode(numpy.array(next_state))[:,0]
-        old_value = self.table[state, actions]
-        for i,(ns,ov,re,st,ac) in enumerate(zip(next_state,old_value,rewards,state,actions)):
-            if not i%100:
-              continue
-            next_max = numpy.max(self.table[ns])       
-            new_value = (1 - self.alpha) * ov + self.alpha * (re + self.gamma * next_max)
-            self.table[st,ac] = new_value
-            self.counter[st,ac] += 1
-
+        if len(self.memory)>=self.min_memory:
+            price, acts, rwrd, not_done, next_state = self.memory.replay()
+            state = self.encode(numpy.array(price))[:,0]
+            [actions,not_done,rewards] = [numpy.reshape(x,[-1]) for x in [acts,not_done,rwrd]]
+            next_state = self.encode(numpy.array(next_state))[:,0]
+            old_value = self.table[state, actions]
+            for i,(ns,ov,re,st,ac) in enumerate(zip(next_state,old_value,rewards,state,actions)):
+                next_max = numpy.max(self.table[ns])       
+                new_value = (1 - self.alpha) * ov + self.alpha * (re + self.gamma * next_max)
+                self.table[st,ac] = new_value
+                self.counter[st,ac] += 1
+            self.memory.empty()
         self.epsilon = self.eps_end + (self.epsilon-self.eps_end)*self.eps_step
 
     def sample_action(self, state):
@@ -84,7 +84,7 @@ class QTable():
         self.counter = numpy.load(loc+'_counter.npy')
 
 class A2C(nn.Module):
-    def __init__(self, states=4, actions=2, action_range=[0,1],gamma=0.98, buffer='ReplayBuffer', capacity=50000, **kwargs):
+    def __init__(self, states=4, actions=2, action_range=[0,1],gamma=0.98, buffer='ReplayBuffer', capacity=50000, min_memory=1000, **kwargs):
         super(A2C, self).__init__()
         self.data = []
         self.gamma = gamma
@@ -98,6 +98,7 @@ class A2C(nn.Module):
         self.experience = namedtuple('Experience', field_names=['state', 'action', 'reward','done', 'new_state'])
         self.cast = [torch.float, torch.int64, torch.float, torch.float, torch.float]
         self.memory = eval(buffer)(capacity,self.experience)
+        self.min_memory = min_memory
         
     def pi(self, x, softmax_dim = 0): # Pi=policy-> Actor
         x = torch.relu(self.fc1(x))
@@ -125,20 +126,22 @@ class A2C(nn.Module):
         return m.item()
 
     def train_net(self):
-        states, actions, rewards, done, s_prime = self.memory.replay(self.cast)      
-        [actions,done,rewards] = [torch.reshape(x,[-1,1]) for x in [actions,done,rewards]]        
-        pi = self.pi(states, softmax_dim=1)
-        pi_prime = self.pi(s_prime, softmax_dim=1)
-        dist = Categorical(probs=pi)
-        td = rewards + self.gamma * self.v(s_prime, pi_prime.detach()) - self.v(states, pi.detach())
-        critic_loss = torch.mean(td**2)
-        actor_loss = -torch.mean(dist.log_prob(actions[:,0])*td[:,0].detach())
+        if len(self.memory)>=self.min_memory:
+            states, actions, rewards, done, s_prime = self.memory.replay(self.cast)      
+            [actions,done,rewards] = [torch.reshape(x,[-1,1]) for x in [actions,done,rewards]]        
+            pi = self.pi(states, softmax_dim=1)
+            pi_prime = self.pi(s_prime, softmax_dim=1)
+            dist = Categorical(probs=pi)
+            td = rewards + self.gamma * self.v(s_prime, pi_prime.detach()) - self.v(states, pi.detach())
+            critic_loss = torch.mean(td**2)
+            #TODO: Entropy penalty
+            actor_loss = -torch.mean(dist.log_prob(actions[:,0])*td[:,0].detach())
 
-        loss = critic_loss + actor_loss
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()     
-        self.memory.empty()
+            loss = critic_loss + actor_loss
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()     
+            self.memory.empty()
 
     def reset(self, entropy):
         self.memory.empty()

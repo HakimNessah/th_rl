@@ -43,10 +43,11 @@ def train_one(
     
     # Train
     t = time.time()
+    state = environment.reset()
     for e in range(epochs):
         # Play trajectory
         done = False
-        state = environment.reset()
+        environment.episode = 0
         while not done:
             # choose actions 
             acts = [ agent.sample_action(torch.from_numpy(state.astype('float32'))) for agent in agents]
@@ -65,12 +66,7 @@ def train_one(
             state = next_state
 
         # Train
-        for A in agents:
-            if A.__class__.__name__ in ['QTable']:
-                A.train_net()
-            else:
-                if len(A.memory)>2000:
-                    A.train_net()
+        [A.train_net() for A in agents]
 
         # Log progress
         if not (e+1)%print_freq:
