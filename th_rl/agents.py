@@ -28,7 +28,7 @@ class QTable():
         self.counter = 0*self.table
 
     def encode(self,state):
-        astate = (state/self.max_state*self.states).astype('int64')
+        astate = numpy.round(state/self.max_state*self.states).astype('int64')
         return astate
     
     def scale(self,actions):
