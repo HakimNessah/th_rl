@@ -11,7 +11,7 @@ from th_rl.buffers import *
 class QTable():
     def __init__(self, states=16, actions=4, action_range=[0,1], gamma=0.99, buffer='ReplayBuffer', capacity=500, max_state=10,
                 alpha=0.1, eps_end=2e-2, epsilon=0.5, eps_step=5e-4,min_memory=100, **kwargs):
-        self.table =  1/gamma+numpy.random.randn(states+1, actions)
+        self.table =  12.5/(1-gamma)+numpy.random.randn(states+1, actions)
         self.gamma = gamma
         self.alpha = alpha
         self.action_space = numpy.arange(0,actions)
@@ -131,11 +131,18 @@ class A2C(nn.Module):
             [actions,done,rewards] = [torch.reshape(x,[-1,1]) for x in [actions,done,rewards]]        
             pi = self.pi(states, softmax_dim=1)
             pi_prime = self.pi(s_prime, softmax_dim=1)
+
+            v = self.v(states, pi.detach())
+            v_prime = self.v(s_prime, pi_prime.detach())
+            td_target =  rewards + self.gamma * v_prime
+            delta = td_target - v
+
             dist = Categorical(probs=pi)
-            td = rewards + self.gamma * self.v(s_prime, pi_prime.detach()) - self.v(states, pi.detach())
-            critic_loss = torch.mean(td**2)
-            #TODO: Entropy penalty
-            actor_loss = -torch.mean(dist.log_prob(actions[:,0])*td[:,0].detach())
+
+            critic_loss = F.smooth_l1_loss(v, td_target.detach()) #torch.mean(td**2)
+            actor_loss = -torch.mean(dist.log_prob(actions[:,0])*delta[:,0].detach())
+            # TODO: entropy
+
 
             loss = critic_loss + actor_loss
             self.optimizer.zero_grad()
