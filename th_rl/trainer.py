@@ -52,7 +52,6 @@ def train_one(
             # choose actions 
             acts = [ agent.sample_action(torch.from_numpy(state.astype('float32'))) for agent in agents]
             scaled_acts = [agent.scale(act) for agent, act in zip(agents, acts)]
-
             # Step through environment
             next_state, reward, done = environment.step(scaled_acts)
 

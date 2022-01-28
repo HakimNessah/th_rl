@@ -4,8 +4,8 @@ import os
 from th_rl.trainer import train_one
 
 @click.command()
-@click.option('--runs', default=2, help='Runs per config', type=int)
-@click.option('--dir', help='Configs dir', type=str)
+@click.option('--runs', default=1, help='Runs per config', type=int)
+@click.option('--dir', default=r'C:\Users\nikolay.tchakarov\Data\Collusion\configs' ,help='Configs dir', type=str)
 def main(**params):
     home = os.path.join(os.path.abspath(params['dir']),'..','runs')
     if not os.path.exists(home):

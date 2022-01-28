@@ -84,11 +84,12 @@ class QTable():
         self.counter = numpy.load(loc+'_counter.npy')
 
 class A2C(nn.Module):
-    def __init__(self, states=4, actions=2, action_range=[0,1],gamma=0.98, buffer='ReplayBuffer', capacity=50000, min_memory=1000, **kwargs):
+    def __init__(self, states=4, actions=2, action_range=[0,1],gamma=0.98, buffer='ReplayBuffer', capacity=50000, min_memory=1000, entropy=0,**kwargs):
         super(A2C, self).__init__()
         self.data = []
         self.gamma = gamma
         self.action_range = action_range
+        self.actions = actions
         self.fc1 = nn.Linear(states,256)
         self.fc2 = nn.Linear(states+actions,256)
         self.fc_pi = nn.Linear(256,actions)
@@ -99,6 +100,7 @@ class A2C(nn.Module):
         self.cast = [torch.float, torch.int64, torch.float, torch.float, torch.float]
         self.memory = eval(buffer)(capacity,self.experience)
         self.min_memory = min_memory
+        self.entropy = entropy
         
     def pi(self, x, softmax_dim = 0): # Pi=policy-> Actor
         x = torch.relu(self.fc1(x))
@@ -113,7 +115,7 @@ class A2C(nn.Module):
         return v
 
     def scale(self, action):
-        return (1/(1+numpy.exp(-action))*(self.action_range[1]-self.action_range[0])+self.action_range[0])
+        return action/self.actions*(self.action_range[1]-self.action_range[0])+self.action_range[0]
           
     def sample_action(self, state):
         prob = self.pi(state)
@@ -132,8 +134,8 @@ class A2C(nn.Module):
             pi = self.pi(states, softmax_dim=1)
             pi_prime = self.pi(s_prime, softmax_dim=1)
 
-            v = self.v(states, pi.detach())
-            v_prime = self.v(s_prime, pi_prime.detach())
+            v = self.v(states, pi)
+            v_prime = self.v(s_prime, pi_prime)
             td_target =  rewards + self.gamma * v_prime
             delta = td_target - v
 
@@ -141,10 +143,8 @@ class A2C(nn.Module):
 
             critic_loss = F.smooth_l1_loss(v, td_target.detach()) #torch.mean(td**2)
             actor_loss = -torch.mean(dist.log_prob(actions[:,0])*delta[:,0].detach())
-            # TODO: entropy
-
-
-            loss = critic_loss + actor_loss
+            entropy = -torch.mean(pi*torch.log(1/pi))
+            loss = critic_loss+actor_loss+self.entropy*entropy
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()     
