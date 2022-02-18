@@ -383,8 +383,10 @@ class CAC(nn.Module):
         return torch.sigmoid(action).item()
 
     def get_action(self, state):
-        action = self.sample_action(torch.from_numpy(state).float())
-        return action
+        mu, _ = self.pi(torch.from_numpy(state).float())
+        dist = Normal(mu, 0)
+        action = dist.sample()
+        return torch.sigmoid(action).item()
 
     def train_net(self):
         if len(self.memory) >= self.min_memory:

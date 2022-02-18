@@ -186,7 +186,7 @@ def plot_learning_curve_sweep(loc, return_fig=False):
 
 
 def plot_experiment(loc, return_fig=False):
-    config, agents, environment = load_experiment(loc)
+    config, agents, environment, _, _ = load_experiment(loc)
     rewards, actions = play_game(agents, environment)
     return plot_trajectory(rewards, actions, loc, return_fig)
 
@@ -195,7 +195,7 @@ def plot_mean_result(loc, return_fig=False):
     expi = os.listdir(loc)
     rewards, actions = 0, 0
     for exp in expi:
-        config, agents, environment = load_experiment(os.path.join(loc, exp))
+        config, agents, environment, _, _ = load_experiment(os.path.join(loc, exp))
         acts, rwds = play_game(agents, environment)
         rewards += rwds
         actions += acts
@@ -211,7 +211,7 @@ def plot_mean_conf(loc, return_fig=False):
     expi = os.listdir(loc)
     rewards, actions = [], []
     for exp in expi:
-        config, agents, environment = load_experiment(os.path.join(loc, exp))
+        config, agents, environment, _, _ = load_experiment(os.path.join(loc, exp))
         acts, rwds = play_game(agents, environment)
         rewards.append(numpy.sum(rwds, axis=1))
         actions.append(acts)
@@ -231,12 +231,12 @@ def plot_mean_conf(loc, return_fig=False):
 
 
 def plot_visits(loc, return_fig=False):
-    config, agents, environment = load_experiment(loc)
+    config, agents, environment, _, _ = load_experiment(loc)
     return [plot_qagent(a, loc, "counter", return_fig=return_fig) for a in agents]
 
 
 def plot_values(loc, return_fig=False):
-    config, agents, environment = load_experiment(loc)
+    config, agents, environment, _, _ = load_experiment(loc)
     return [plot_qagent(a, loc, "value", return_fig=return_fig) for a in agents]
 
 
@@ -246,7 +246,7 @@ def plot_sweep_conf(loc, return_fig=False):
         exp_loc = os.path.join(loc, iloc)
         rewards = []
         for exp in os.listdir(exp_loc):
-            config, agents, environment = load_experiment(os.path.join(exp_loc, exp))
+            config, agents, environment, _, _ = load_experiment(os.path.join(exp_loc, exp))
             acts, rwds = play_game(agents, environment)
             rewards.append(numpy.sum(rwds, axis=1))
         rewards = numpy.stack(rewards, axis=0)
