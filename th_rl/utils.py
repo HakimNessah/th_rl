@@ -1,12 +1,15 @@
+from re import I
+from turtle import fillcolor
+from matplotlib.pyplot import axis, xlim, ylim
 import numpy
 from th_rl.trainer import create_game
 import os
 import pandas
 import click
-import json
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
+from tqdm import tqdm
 
 
 def load_experiment(loc):
@@ -30,6 +33,7 @@ def play_game(agents, environment, iters=1):
         done = False
         state = environment.reset()
         next_state = state
+        A, R = [], []
         while not done:
             # choose actions
             acts = [agent.get_action(next_state) for agent in agents]
@@ -41,10 +45,11 @@ def play_game(agents, environment, iters=1):
 
             # Step through environment
             next_state, reward, done = environment.step(scaled_acts)
-            rewards.append(reward)
-            actions.append(scaled_acts)
-
-    return numpy.array(actions), numpy.array(rewards)
+            R.append(reward)
+            A.append(scaled_acts)
+        rewards.append(R)
+        actions.append(A)
+    return numpy.stack(actions, axis=2), numpy.stack(rewards, axis=2)
 
 
 def plot_matrix(
@@ -71,7 +76,14 @@ def plot_matrix(
     fig.show()
 
 
-def plot_qagent(agent, title="", field="value", return_fig=False):
+def plot_qagent(
+    agent,
+    title="",
+    field="value",
+    return_fig=False,
+    state_range=[0, 100],
+    action_range=[0, 101],
+):
     if field == "value":
         z = agent.table
     else:
@@ -81,7 +93,13 @@ def plot_qagent(agent, title="", field="value", return_fig=False):
     x = agent.action_range[0] + agent.action_space / agent.actions * (
         agent.action_range[1] - agent.action_range[0]
     )
-    return plot_matrix(x, y, z, title=title, return_fig=return_fig)
+    return plot_matrix(
+        x[action_range[0] : action_range[1]],
+        y[state_range[0] : state_range[1]],
+        z[action_range[0] : action_range[1], state_range[0] : state_range[1]],
+        title=title,
+        return_fig=return_fig,
+    )
 
 
 def plot_trajectory(actions, rewards, title="", return_fig=False):
@@ -152,6 +170,138 @@ def plot_learning_curve_conf(loc, return_fig=False):
     fig.show()
 
 
+def plot_multi_lc_area(
+    loc=r"C:\Users\nikolay.tchakarov\Data\Collusion\runs",
+    exp=["qtable_001", "qtable_01", "qtable_1"],
+    names=["QTable 0.1%", "QTable 1%", "QTable 10%"],
+    colors=[
+        "rgba(50,100,220,0.5)",
+        "rgba(220,50,100,0.5)",
+        "rgba(50,220,100,0.5)",
+    ],
+    title="",
+    return_fig=False,
+):
+    fig = go.Figure()
+    for i, e in enumerate(exp):
+        rewards = []
+        for f in os.listdir(os.path.join(loc, e)):
+            config, _, _, _, rew = load_experiment(os.path.join(loc, e, f))
+            rewards.append(rew)
+        rewards = numpy.stack(rewards, axis=2).sum(axis=1)
+        data = numpy.percentile(a=rewards, q=[10, 50, 90], axis=-1)
+        add_conf_area(fig, data, colors[i], names[i])
+    fig.add_trace(
+        go.Scatter(
+            y=22.2222 + 0 * data[1, :],
+            fill=None,
+            mode="lines",
+            line_color="red",
+            name="Nash",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            y=25 + 0 * data[1, :],
+            fill=None,
+            mode="lines",
+            line_color="black",
+            name="Collusion",
+        )
+    )
+    fig.update_yaxes(range=[15, 25.1])
+    fig.update_layout(
+        height=600,
+        width=600,
+        title_text=title,
+        title_x=0.5,
+        legend=dict(y=0.02, x=0.52),
+    )
+
+    if return_fig:
+        return fig
+    fig.show()
+
+
+def plot_learning_curve_area(loc, names, title="", return_fig=False):
+    fig = go.Figure()
+    rewards = []
+    for f in os.listdir(loc):
+        config, _, _, _, rew = load_experiment(os.path.join(loc, f))
+        rewards.append(rew)
+
+    rewards = numpy.stack(rewards, axis=2)
+    rewards = numpy.concatenate([rewards, rewards.sum(axis=1, keepdims=True)], axis=1)
+    data = numpy.percentile(a=rewards, q=[10, 50, 90], axis=-1)
+    colors = ["rgba(60,100,220,0.5)", "rgba(200,60,200,0.5)", "rgba(120,120,120,0.5)"]
+    for i in range(3):
+        add_conf_area(fig, data[:, :, i], colors[i], names[i])
+    fig.add_trace(
+        go.Scatter(
+            y=22.2222 + 0 * data[1, :, 0],
+            fill=None,
+            mode="lines",
+            line_color="red",
+            name="Nash",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            y=25 + 0 * data[1, :, 0],
+            fill=None,
+            mode="lines",
+            line_color="black",
+            name="Collusion",
+        )
+    )
+    fig.update_yaxes(range=[0, 25.1])
+    fig.update_layout(
+        height=600,
+        width=600,
+        title_text=title,
+        title_x=0.5,
+        legend=dict(y=0.02, x=0.52),
+    )
+
+    if return_fig:
+        return fig
+    fig.show()
+
+
+def add_conf_area(fig, data, color, name):
+    fig.add_trace(
+        go.Scatter(
+            y=data[1],
+            fill=None,
+            mode="lines",
+            line_color=color,
+            name=None,
+            showlegend=False,
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            y=data[0],
+            fill=None,
+            mode="lines",
+            line_color=color,
+            name=None,
+            showlegend=False,
+        ),
+    )
+    fig.add_trace(
+        go.Scatter(
+            y=data[2],
+            fill="tonexty",
+            mode="lines",
+            fillcolor=color,
+            line_color=color,
+            name=name,
+        )
+    )
+    return fig
+
+
 def plot_learning_curve_sweep(loc, return_fig=False):
     plotdata = pandas.DataFrame()
     for e in os.listdir(loc):
@@ -187,7 +337,8 @@ def plot_learning_curve_sweep(loc, return_fig=False):
 
 def plot_experiment(loc, return_fig=False):
     config, agents, environment, _, _ = load_experiment(loc)
-    rewards, actions = play_game(agents, environment)
+    actions, rewards = play_game(agents, environment)
+    breakpoint()
     return plot_trajectory(rewards, actions, loc, return_fig)
 
 
@@ -197,8 +348,8 @@ def plot_mean_result(loc, return_fig=False):
     for exp in expi:
         config, agents, environment, _, _ = load_experiment(os.path.join(loc, exp))
         acts, rwds = play_game(agents, environment)
-        rewards += rwds
-        actions += acts
+        rewards += rwds.mean(axis=-1)
+        actions += acts.mean(axis=-1)
     return plot_trajectory(
         actions / len(expi),
         rewards / len(expi),
@@ -213,8 +364,8 @@ def plot_mean_conf(loc, return_fig=False):
     for exp in expi:
         config, agents, environment, _, _ = load_experiment(os.path.join(loc, exp))
         acts, rwds = play_game(agents, environment)
-        rewards.append(numpy.sum(rwds, axis=1))
-        actions.append(acts)
+        rewards.append(rwds.mean(axis=-1).sum(axis=1))
+        actions.append(acts.mean(axis=-1))
     rewards = pandas.DataFrame(data=numpy.stack(rewards, axis=0))
     rewards = rewards.ewm(halflife=5, axis=1, min_periods=0).mean()
     plotdata = pandas.DataFrame()
@@ -245,10 +396,13 @@ def plot_sweep_conf(loc, return_fig=False):
     for iloc in os.listdir(loc):
         exp_loc = os.path.join(loc, iloc)
         rewards = []
+        print("Playing {}...".format(iloc))
         for exp in os.listdir(exp_loc):
-            config, agents, environment, _, _ = load_experiment(os.path.join(exp_loc, exp))
+            config, agents, environment, _, _ = load_experiment(
+                os.path.join(exp_loc, exp)
+            )
             acts, rwds = play_game(agents, environment)
-            rewards.append(numpy.sum(rwds, axis=1))
+            rewards.append(rwds.mean(axis=-1).sum(axis=1))
         rewards = numpy.stack(rewards, axis=0)
         pt = numpy.percentile(rewards, 50, axis=1)
         ptiles.append([numpy.percentile(pt, p) for p in [25, 50, 75]])
@@ -267,6 +421,88 @@ def calc_discount_nash(discount, freq):
     return 22.22222 * (
         freq * (1 + (1 - discount) + (1 - discount) ** 2) / 3 + (1 - freq)
     )
+
+
+def box_plot_sweep(
+    loc=r"C:\Users\nikolay.tchakarov\Data\Collusion\runs",
+    return_fig=False,
+    exp=["qtable_001", "qtable_01", "qtable_1", "cac", "qtable_cac"],
+    names=["QTable 0.1%", "QTable 1%", "QTable 10%", "CAC", "QTable vs CAC"],
+    coll_rate_scale=True,
+    title="",
+    iters=1,
+):
+    rewards = []
+    for iloc in exp:
+        exp_loc = os.path.join(loc, iloc)
+        exp_reward = []
+        print("Playing {}...".format(iloc))
+
+        for exp in tqdm(os.listdir(exp_loc)):
+            config, agents, environment, _, _ = load_experiment(
+                os.path.join(exp_loc, exp)
+            )
+            _, rwds = play_game(agents, environment, iters=iters)
+            exp_reward.append(
+                numpy.percentile(rwds.sum(axis=1), 50, axis=0, keepdims=True)
+            )
+        exp_reward = numpy.stack(exp_reward, axis=0)
+        rewards.append(exp_reward.reshape([-1, exp_reward.shape[1]]))
+    rewards = numpy.concatenate(rewards, axis=-1)
+
+    if coll_rate_scale:
+        ylim = [-1, 1]
+        rewards = (rewards - 22.22222) / (25 - 22.22222)
+    else:
+        ylim = [20, 25]
+    fig = go.Figure()
+    [fig.add_trace(go.Box(y=rewards[:, i], name=name)) for i, name in enumerate(names)]
+    fig.update_yaxes(range=ylim)
+    fig.update_layout(
+        height=600,
+        width=600,
+        title_text=title,
+        title_x=0.5,
+        legend=dict(x=0.01, y=0.01),
+    )
+    if return_fig:
+        return fig
+    fig.show()
+
+
+def box_plot_player(
+    loc=r"C:\Users\nikolay.tchakarov\Data\Collusion\runs",
+    return_fig=False,
+    exp="qtable_cac",
+    names=["QTable", "CAC"],
+    colors=["rgba(60,100,220,0.5)", "rgba(180,40,180,0.5)"],
+    title="",
+    iters=1,
+):
+    exp_loc = os.path.join(loc, exp)
+    exp_reward = []
+
+    for exp in tqdm(os.listdir(exp_loc)):
+        config, agents, environment, _, _ = load_experiment(os.path.join(exp_loc, exp))
+        _, rwds = play_game(agents, environment, iters=iters)
+        exp_reward.append(numpy.percentile(rwds, 50, axis=0))
+
+    exp_reward = numpy.stack(exp_reward, axis=0)
+    rewards = exp_reward.reshape([-1, exp_reward.shape[1]])
+
+    ylim = [7, 15]
+    fig = go.Figure()
+    [
+        fig.add_trace(go.Box(y=rewards[:, i], name=name, fillcolor=colors[i]))
+        for i, name in enumerate(names)
+    ]
+    fig.update_yaxes(range=ylim)
+    fig.update_layout(
+        height=600, width=600, title_text=title, title_x=0.5, legend=dict(y=0.02, x=0.6)
+    )
+    if return_fig:
+        return fig
+    fig.show()
 
 
 @click.command()

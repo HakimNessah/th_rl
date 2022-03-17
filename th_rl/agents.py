@@ -384,7 +384,7 @@ class CAC(nn.Module):
 
     def get_action(self, state):
         mu, _ = self.pi(torch.from_numpy(state).float())
-        dist = Normal(mu, 0)
+        dist = Normal(mu, 1e-5)
         action = dist.sample()
         return torch.sigmoid(action).item()
 
