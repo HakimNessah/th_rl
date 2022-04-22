@@ -132,7 +132,11 @@ def plot_trajectory(actions, rewards, title="", return_fig=False):
             row=2,
             col=1,
         )
-    fig.update_layout(height=600, width=600, title_text=title)
+    fig.update_layout(
+        height=600,
+        width=600,
+        # title_text=title
+    )
     if return_fig:
         return fig
     fig.show()
@@ -181,6 +185,8 @@ def plot_multi_lc_area(
     ],
     title="",
     return_fig=False,
+    x=0.52,
+    y=0.02,
 ):
     fig = go.Figure()
     for i, e in enumerate(exp):
@@ -213,9 +219,9 @@ def plot_multi_lc_area(
     fig.update_layout(
         height=600,
         width=600,
-        title_text=title,
+        # title_text=title,
         title_x=0.5,
-        legend=dict(y=0.02, x=0.52),
+        legend=dict(y=y, x=x),
     )
 
     if return_fig:
@@ -223,7 +229,7 @@ def plot_multi_lc_area(
     fig.show()
 
 
-def plot_learning_curve_area(loc, names, title="", return_fig=False):
+def plot_learning_curve_area(loc, names, title="", return_fig=False, x=0.52, y=0.02):
     fig = go.Figure()
     rewards = []
     for f in os.listdir(loc):
@@ -258,9 +264,9 @@ def plot_learning_curve_area(loc, names, title="", return_fig=False):
     fig.update_layout(
         height=600,
         width=600,
-        title_text=title,
+        # title_text=title,
         title_x=0.5,
-        legend=dict(y=0.02, x=0.52),
+        legend=dict(y=y, x=x),
     )
 
     if return_fig:
@@ -302,7 +308,7 @@ def add_conf_area(fig, data, color, name):
     return fig
 
 
-def plot_learning_curve_sweep(loc, return_fig=False):
+def plot_learning_curve_sweep(loc, return_fig=False, x=0.3, y=0.02):
     plotdata = pandas.DataFrame()
     for e in os.listdir(loc):
         rewards = []
@@ -324,8 +330,8 @@ def plot_learning_curve_sweep(loc, return_fig=False):
     #  position legends inside a plot
     fig.update_layout(
         legend=dict(
-            x=0.3,  # value must be between 0 to 1.
-            y=0.02,  # value must be between 0 to 1.
+            x=x,  # value must be between 0 to 1.
+            y=y,  # value must be between 0 to 1.
             traceorder="normal",
             font=dict(family="sans-serif", size=10, color="black"),
         )
@@ -431,6 +437,8 @@ def box_plot_sweep(
     coll_rate_scale=True,
     title="",
     iters=1,
+    x=0.01,
+    y=0.01,
 ):
     rewards = []
     for iloc in exp:
@@ -461,9 +469,9 @@ def box_plot_sweep(
     fig.update_layout(
         height=600,
         width=600,
-        title_text=title,
+        # title_text=title,
         title_x=0.5,
-        legend=dict(x=0.01, y=0.01),
+        legend=dict(x=x, y=y),
     )
     if return_fig:
         return fig
@@ -478,6 +486,8 @@ def box_plot_player(
     colors=["rgba(60,100,220,0.5)", "rgba(180,40,180,0.5)"],
     title="",
     iters=1,
+    x=0.6,
+    y=0.02,
 ):
     exp_loc = os.path.join(loc, exp)
     exp_reward = []
@@ -498,7 +508,11 @@ def box_plot_player(
     ]
     fig.update_yaxes(range=ylim)
     fig.update_layout(
-        height=600, width=600, title_text=title, title_x=0.5, legend=dict(y=0.02, x=0.6)
+        height=600,
+        width=600,
+        # title_text=title,
+        title_x=0.5,
+        legend=dict(y=y, x=x),
     )
     if return_fig:
         return fig
