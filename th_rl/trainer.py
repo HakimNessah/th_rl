@@ -14,11 +14,13 @@ from collections import deque
 def create_game(configpath):
     # Load config
     config = json.load(open(configpath))
+    # Create environment
+    environment = eval(config["environment"]["name"])(**config["environment"])
 
     # Create agents
-    agents = [eval(agent["name"])(**agent) for agent in config["agents"]]
-
-    environment = eval(config["environment"]["name"])(**config["environment"])
+    agents = [
+        eval(agent["name"])(env=environment, **agent) for agent in config["agents"]
+    ]
 
     return config, agents, environment
 
