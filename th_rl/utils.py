@@ -1,5 +1,5 @@
 from re import I
-from turtle import fillcolor
+from turtle import bgcolor, fillcolor
 from matplotlib.pyplot import axis, xlim, ylim
 import numpy
 from th_rl.trainer import create_game
@@ -9,7 +9,7 @@ import click
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
-from tqdm import tqdm
+from tqdm import tqdm, trange
 from collections import deque
 import torch
 
@@ -57,16 +57,18 @@ def play_stateless(agents, environment, config):
 
 def play_perfectmonitoring(agents, environment, config):
     rewards, actions = [], []
-    lag = config.get("lag", 0)
+    lag = config["training"].get("lag", 0)
     iters = config.get("iters", 1)
     if lag == 0:
         buffer = deque(maxlen=1)
     else:
         buffer = deque(maxlen=lag * environment.max_steps)
-    for i in range(iters):
+
+    for i in trange(iters + lag):
         done = False
         state = torch.Tensor([1.0, 1.0])
         A, R = [], []
+        environment.reset()
         while not done:
             # choose actions
             acts = [agent.sample_action(x) for agent, x in zip(agents, state)]
@@ -81,7 +83,10 @@ def play_perfectmonitoring(agents, environment, config):
 
         rewards.append(R)
         actions.append(A)
-    return numpy.stack(actions, axis=2), numpy.stack(rewards, axis=2)
+    actions, rewards = numpy.concatenate(actions, axis=0), numpy.concatenate(
+        rewards, axis=0
+    )
+    return actions[:, :, None], rewards[:, :, None]
 
 
 def play_selfmonitoring(agents, environment, config):
@@ -397,21 +402,23 @@ def plot_learning_curve_sweep(loc, return_fig=False, x=0.3, y=0.02):
         plotdata[e + "-median"] = rewards.quantile(0.5, axis=1)
         # plotdata[e+'-75th'] = rewards.quantile(0.75,axis=1)
         # plotdata[e+'-25th'] = rewards.quantile(0.25,axis=1)
-    plotdata["Nash"] = 22.22
-    plotdata["Cartel"] = 25
+    plotdata["Nash"] = 1.25
+    plotdata["Cartel"] = 2.46
     fig = px.line(
         plotdata,
         width=500,
         height=500,
-        title="Learning Curve " + os.path.basenamrpde(loc),
+        title="Learning Curve " + os.path.basename(loc),
     )
-    fig.update_yaxes(range=[10, 25])
+
+    fig.update_yaxes(range=[0, 2.5])
     #  position legends inside a plot
     fig.update_layout(
         legend=dict(
             x=x,  # value must be between 0 to 1.
             y=y,  # value must be between 0 to 1.
             traceorder="normal",
+            bgcolor="rgba(250,250,250,0.5)",
             font=dict(family="sans-serif", size=10, color="black"),
         )
     )
@@ -424,6 +431,7 @@ def plot_experiment(loc, return_fig=False):
     config, agents, environment, _, _ = load_experiment(loc)
     names = [a["name"] + str(i) for i, a in enumerate(config["agents"])]
     actions, rewards = play_game(agents, environment, config)
+    breakpoint()
     actions = pandas.DataFrame(data=actions[:, :, 0], columns=names)
     rewards = pandas.DataFrame(data=rewards[:, :, 0], columns=names)
     return plot_trajectory(actions, rewards, loc, return_fig)
@@ -617,6 +625,46 @@ def plot_cac_mu(loc, return_fig=False):
     if return_fig:
         return fig
     fig.show()
+
+
+def plot_cac_mu_conf(loc, return_fig=False):
+    numex = len(os.listdir(loc))
+    config, agents, environment, _, _ = load_experiment(os.path.join(loc, "0"))
+    prices = torch.linspace(agents[0].action_range[0], agents[0].action_range[1], 100)
+    actions = numpy.zeros((prices.shape[0], 2, numex))
+    for k, e in enumerate(os.listdir(loc)):
+        config, agents, environment, _, _ = load_experiment(os.path.join(loc, str(k)))
+        for i in range(prices.shape[0]):
+            for j in range(2):
+                actions[i, j, k] = agents[j].scale(agents[j].sample_action(prices[i]))
+
+    plotdata = pandas.DataFrame()
+    plotdata[["Mu-1", "Mu-2"]] = numpy.quantile(actions, 0.5, axis=-1)
+    plotdata["Nash"] = 1.25
+    plotdata["Cartel"] = 2.46
+    plotdata.index = prices.numpy()
+    fig = px.line(plotdata, width=500, height=500, title=os.path.basename(loc))
+    fig.update_yaxes(range=[0, 2.46])
+    #  position legends inside a plot
+    fig.update_layout(
+        legend=dict(
+            x=0.5,  # value must be between 0 to 1.
+            y=0,  # value must be between 0 to 1.
+            traceorder="normal",
+            bgcolor="rgba(250,250,250,0.5)",
+            font=dict(family="sans-serif", size=10, color="black"),
+        ),
+        xaxis_title="Action",
+        yaxis_title="Response",
+    )
+    if return_fig:
+        return fig
+    fig.show()
+    return None
+
+
+def plot_cac_mu_sweep(loc, return_fig=False):
+    return None
 
 
 @click.command()

@@ -33,7 +33,7 @@
    },
    "training": {
       "print_freq": 500,
-      "epochs": 25000,
+      "epochs": 30000,
       "name": "perfectmonitoring"
    }
 }

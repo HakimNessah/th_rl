@@ -17,6 +17,8 @@ def main():
         "Plot QTable Values": utils.plot_values,
         "Plot QTable Visits": utils.plot_visits,
         "Plot CAC Mu": utils.plot_cac_mu,
+        "Plot CAC Mu Confidence": utils.plot_cac_mu_conf,
+        "Plot CAC Mu Sweep": utils.plot_cac_mu_sweep,
     }
 
     for k, f in plots.items():

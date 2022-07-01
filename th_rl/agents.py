@@ -620,7 +620,8 @@ class ModelCAC(nn.Module):
             self.experience.append(state, action, reward, done, s_prime)
             for _ in range(self.replays):
                 # choose actions
-                act = self.sample_action(state)
+                # act = self.sample_action(state)
+                act = self.action_range[0] + numpy.random.rand() * self.action_range[1]
                 scaled_act = self.scale(act)
                 _, R, _ = self.env.step(torch.tensor([scaled_act, state]))
                 # save transition to the replay memory
