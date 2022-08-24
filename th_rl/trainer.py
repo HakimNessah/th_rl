@@ -113,7 +113,7 @@ def perfectmonitoring(agents, environment, **kwargs):
 
             # save transition to the replay memory
             for s, agent, r, action, next_s in zip(
-                state, agents, reward, acts, scaled_acts
+                state, agents, reward, acts, scaled_acts[::-1]
             ):
                 agent.memory.append(s, action, r, not done, next_s)
             buffer.append(scaled_acts)
@@ -124,7 +124,7 @@ def perfectmonitoring(agents, environment, **kwargs):
             rewards_log[e, :] += numpy.array(reward)
             actions_log[e, :] += numpy.array(scaled_acts)
         # Train
-        [A.train_net() for A in agents]
+        [A.train_net(False) for A in agents]
 
         # Log progress
         if not (e + 1) % print_freq:

@@ -436,6 +436,42 @@ class ActorCritic(nn.Module):
         self.load_state_dict(torch.load(loc))
 
 
+class Const:
+    def __init__(
+        self,
+        states=4,
+        action_range=[0, 1],
+        gamma=0.98,
+        buffer="ReplayBuffer",
+        capacity=50000,
+        min_memory=1000,
+        **kwargs
+    ):
+        self.action = kwargs.get("action")
+        self.data = []
+        self.action_range = action_range
+        self.experience = namedtuple(
+            "Experience", field_names=["state", "action", "reward", "done", "new_state"]
+        )
+        self.cast = [torch.float, torch.float, torch.float, torch.float, torch.float]
+        self.memory = eval(buffer)(capacity, self.experience)
+
+    def scale(self, action):
+        return (
+            action * (self.action_range[1] - self.action_range[0])
+            + self.action_range[0]
+        )
+
+    def sample_action(self, state):
+        return self.action
+
+    def get_action(self, state):
+        return self.action
+
+    def train_net(self, dobreak):
+        return None
+
+
 class CAC(nn.Module):
     def __init__(
         self,
@@ -494,7 +530,7 @@ class CAC(nn.Module):
         action = dist.sample()
         return torch.sigmoid(action).item()
 
-    def train_net(self):
+    def train_net(self, dobreak):
         if len(self.memory) >= self.min_memory:
             states, actions, rewards, done, s_prime = self.memory.replay(self.cast)
             [actions, done, rewards, states, s_prime] = [
@@ -516,6 +552,8 @@ class CAC(nn.Module):
             actor_loss = -dist.log_prob(logits) * advantage.detach()
             entropy = -torch.mean(dist.entropy())
 
+            if dobreak:
+                breakpoint()
             loss = torch.mean(critic_loss + actor_loss) + self.entropy * entropy
             self.optimizer.zero_grad()
             loss.backward()
