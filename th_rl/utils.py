@@ -11,6 +11,10 @@ from plotly.subplots import make_subplots
 import plotly.express as px
 from tqdm import tqdm
 
+HEIGHT = 600
+WIDTH = 600
+WRITE = r"C:\temp"
+
 
 def load_experiment(loc):
     cpath = os.path.join(loc, "config.json")
@@ -67,8 +71,8 @@ def plot_matrix(
     fig.update_layout(
         scene=dict(xaxis_title=xlabel, yaxis_title=ylabel, zaxis_title=zlabel),
         title=title,
-        width=700,
-        height=600,
+        height=HEIGHT,
+        width=WIDTH,
         margin=dict(r=20, b=10, l=10, t=30),
     )
     if return_fig:
@@ -133,13 +137,15 @@ def plot_trajectory(actions, rewards, title="", return_fig=False):
             col=1,
         )
     fig.update_layout(
-        height=600,
-        width=600,
+        height=HEIGHT,
+        width=WIDTH,
         # title_text=title
     )
     if return_fig:
         return fig
     fig.show()
+    if WRITE:
+        fig.write_image(os.path.join(WRITE, title + ".svg"))
 
 
 def plot_learning_curve(loc, return_fig=False):
@@ -167,7 +173,7 @@ def plot_learning_curve_conf(loc, return_fig=False):
     plotdata["25th"] = rewards.quantile(0.25, axis=1)
     plotdata["Nash"] = 22.22
     plotdata["Cartel"] = 25
-    fig = px.line(plotdata, width=500, height=500, title=os.path.basename(loc))
+    fig = px.line(plotdata, height=HEIGHT, width=WIDTH, title=os.path.basename(loc))
     fig.update_yaxes(range=[10, 25])
     if return_fig:
         return fig
@@ -187,6 +193,8 @@ def plot_multi_lc_area(
     return_fig=False,
     x=0.52,
     y=0.02,
+    xlabel="",
+    ylabel="",
 ):
     fig = go.Figure()
     for i, e in enumerate(exp):
@@ -217,19 +225,25 @@ def plot_multi_lc_area(
     )
     fig.update_yaxes(range=[15, 25.1])
     fig.update_layout(
-        height=600,
-        width=600,
+        height=HEIGHT,
+        width=WIDTH,
         # title_text=title,
         title_x=0.5,
         legend=dict(y=y, x=x),
+        xaxis_title=xlabel,
+        yaxis_title=ylabel,
     )
 
     if return_fig:
         return fig
     fig.show()
+    if WRITE:
+        fig.write_image(os.path.join(WRITE, title + ".svg"))
 
 
-def plot_learning_curve_area(loc, names, title="", return_fig=False, x=0.52, y=0.02):
+def plot_learning_curve_area(
+    loc, names, title="", return_fig=False, x=0.52, y=0.02, xlabel="", ylabel=""
+):
     fig = go.Figure()
     rewards = []
     for f in os.listdir(loc):
@@ -262,16 +276,20 @@ def plot_learning_curve_area(loc, names, title="", return_fig=False, x=0.52, y=0
     )
     fig.update_yaxes(range=[0, 25.1])
     fig.update_layout(
-        height=600,
-        width=600,
+        height=HEIGHT,
+        width=WIDTH,
         # title_text=title,
         title_x=0.5,
         legend=dict(y=y, x=x),
+        xaxis_title=xlabel,
+        yaxis_title=ylabel,
     )
 
     if return_fig:
         return fig
     fig.show()
+    if WRITE:
+        fig.write_image(os.path.join(WRITE, title + ".svg"))
 
 
 def add_conf_area(fig, data, color, name):
@@ -324,7 +342,10 @@ def plot_learning_curve_sweep(loc, return_fig=False, x=0.3, y=0.02):
     plotdata["Nash"] = 22.22
     plotdata["Cartel"] = 25
     fig = px.line(
-        plotdata, width=500, height=500, title="Learning Curve " + os.path.basename(loc)
+        plotdata,
+        height=HEIGHT,
+        width=WIDTH,
+        title="Learning Curve " + os.path.basename(loc),
     )
     fig.update_yaxes(range=[10, 25])
     #  position legends inside a plot
@@ -380,7 +401,7 @@ def plot_mean_conf(loc, return_fig=False):
     plotdata["25th"] = rewards.quantile(0.25, axis=0)
     plotdata["Nash"] = 22.22
     plotdata["Cartel"] = 25
-    fig = px.line(plotdata, width=500, height=500, title=os.path.basename(loc))
+    fig = px.line(plotdata, height=HEIGHT, width=WIDTH, title=os.path.basename(loc))
     fig.update_yaxes(range=[10, 25])
     if return_fig:
         return fig
@@ -416,7 +437,7 @@ def plot_sweep_conf(loc, return_fig=False):
     plotdata["Nash"] = 22.22
     plotdata["Cartel"] = 25
     plotdata.index = os.listdir(loc)
-    fig = px.line(plotdata, width=500, height=500, title=os.path.basename(loc))
+    fig = px.line(plotdata, height=HEIGHT, width=WIDTH, title=os.path.basename(loc))
     fig.update_yaxes(range=[10, 25])
     if return_fig:
         return fig
@@ -439,6 +460,8 @@ def box_plot_sweep(
     iters=1,
     x=0.01,
     y=0.01,
+    xlabel="",
+    ylabel="",
 ):
     rewards = []
     for iloc in exp:
@@ -467,15 +490,19 @@ def box_plot_sweep(
     [fig.add_trace(go.Box(y=rewards[:, i], name=name)) for i, name in enumerate(names)]
     fig.update_yaxes(range=ylim)
     fig.update_layout(
-        height=600,
-        width=600,
+        height=HEIGHT,
+        width=WIDTH,
         # title_text=title,
         title_x=0.5,
         legend=dict(x=x, y=y),
+        xaxis_title=xlabel,
+        yaxis_title=ylabel,
     )
     if return_fig:
         return fig
     fig.show()
+    if WRITE:
+        fig.write_image(os.path.join(WRITE, title + ".svg"))
 
 
 def box_plot_player(
@@ -488,6 +515,8 @@ def box_plot_player(
     iters=1,
     x=0.6,
     y=0.02,
+    xlabel="",
+    ylabel="",
 ):
     exp_loc = os.path.join(loc, exp)
     exp_reward = []
@@ -508,15 +537,19 @@ def box_plot_player(
     ]
     fig.update_yaxes(range=ylim)
     fig.update_layout(
-        height=600,
-        width=600,
+        height=HEIGHT,
+        width=WIDTH,
         # title_text=title,
         title_x=0.5,
         legend=dict(y=y, x=x),
+        xaxis_title=xlabel,
+        yaxis_title=ylabel,
     )
     if return_fig:
         return fig
     fig.show()
+    if WRITE:
+        fig.write_image(os.path.join(WRITE, title + ".svg"))
 
 
 @click.command()
