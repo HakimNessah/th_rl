@@ -57,3 +57,35 @@ class Hotelling:
 
     def get_optimal(self):
         return {"nash": self.t / self.phi, "cartel": self.u - 0.5 * self.t}
+
+
+class Bertrand:
+    def __init__(self, nplayers=2, max_steps=100, **kwargs):
+        self.nplayers = nplayers
+        self.max_steps = max_steps
+        self.episode = 0
+        self.demand = torch.tensor([0, 0]).type(torch.float)
+        assert nplayers == 2, "Env is only defined for exactly two players"
+
+    def calc_demand(self, p):
+        if p[0] < p[1] and p[0] <= 1:
+            return [1, 0]
+        elif p[0] > p[1] and p[1] <= 0:
+            return [0, 1]
+        elif p[0] == p[1] and p[0] <= 1:
+            return [0.5, 0.5]
+        else:
+            return [0, 0]
+
+    def step(self, prices):
+        demand = self.calc_demand(prices)
+        self.demand[0] = demand[0]
+        self.demand[1] = demand[1]
+
+        rewards = self.demand * prices
+        self.episode += 1
+        done = self.episode >= self.max_steps
+        return self.demand, rewards, done
+
+    def reset(self):
+        self.episode = 0

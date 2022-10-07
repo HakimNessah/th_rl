@@ -25,6 +25,68 @@ def create_game(configpath):
     return config, agents, environment
 
 
+def onestep_qtable(agents, environment, **kwargs):
+    epochs = kwargs.get("epochs", 10000)
+    print_freq = kwargs.get("print_freq", 500)
+    # Init Logs
+    max_steps = environment.max_steps
+    rewards_log = numpy.zeros((epochs, len(agents)))
+    actions_log = numpy.zeros((epochs, len(agents)))
+    # Train
+    t = time.time()
+    state = numpy.array([1, 1])
+    for e in range(epochs):
+
+        # Play trajectory
+        done = False
+        environment.episode = 0
+        while not done:
+            # choose actions
+            acts = numpy.array([agent.sample_action(state) for agent in agents])
+            scaled_acts = [agent.scale(act)[1] for agent, act in zip(agents, acts)]
+            demand, reward, done = environment.step(numpy.array(scaled_acts))
+
+            # save transition to the replay memory
+            for agent, r, action in zip(agents, reward):
+                agent.memory.append(state, action, r, not done, acts)
+            state = acts
+
+            # Log
+            rewards_log[e, :] += numpy.array(reward) / max_steps
+            actions_log[e, :] += numpy.array(scaled_acts) / max_steps
+
+        # Train
+        [A.train_net() for A in agents]
+
+        # Log progress
+        if not (e + 1) % print_freq:
+            rew = numpy.mean(rewards_log[e - print_freq + 1 : e + 1, :], axis=0)
+            act = numpy.mean(actions_log[e - print_freq + 1 : e + 1, :], axis=0)
+            if "epsilon" in dir(agents[0]):
+                print(
+                    "eps:{} | time:{:2.2f} | episode:{:3d} | reward:{} | actions:{}".format(
+                        numpy.round(numpy.array([a.epsilon for a in agents]) * 1000)
+                        / 1000,
+                        time.time() - t,
+                        e,
+                        numpy.round(100 * rew) / 100,
+                        numpy.round(100 * act) / 100,
+                    )
+                )
+            else:
+                print(
+                    "time:{:2.2f} | episode:{:3d} | reward:{} | actions:{}".format(
+                        time.time() - t,
+                        e,
+                        numpy.round(100 * rew) / 100,
+                        numpy.round(100 * act) / 100,
+                    )
+                )
+            t = time.time()
+
+    return rewards_log, actions_log
+
+
 def stateless(agents, environment, **kwargs):
     epochs = kwargs.get("epochs", 10000)
     print_freq = kwargs.get("print_freq", 500)

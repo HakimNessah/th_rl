@@ -1,0 +1,28 @@
+{
+   "agents": [
+      {
+         "name": "QTable",
+         "actions":4,
+         "states":4,
+         "statelen":2,
+         "max_punish":5
+      },
+      {
+         "name": "QTable",
+         "actions":4,
+         "states":4,
+         "max_punish":5,
+         "statelen":2
+      }
+   ],
+   "environment": {
+      "name": "Bertrand",
+      "nplayers": 2,
+      "max_steps": 100
+   },
+   "training": {
+      "print_freq": 500,
+      "epochs": 40000,
+      "name":"base"
+   }
+}

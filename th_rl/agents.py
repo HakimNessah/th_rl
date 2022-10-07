@@ -30,11 +30,15 @@ class QTable:
         self.eps_step = kwargs.get("eps_step", 0.9995)
         self.eps_end = kwargs.get("eps_end", 0.01)
         self.states = kwargs.get("states", 1)
+        self.statelen = kwargs.get("statelen", 1)
         self.alpha = kwargs.get("alpha", 0.1)
         self.action_range = kwargs.get("action_range", [0, 1])
-        self.max_state = kwargs.get("max_state", 1)
-        self.table = 12.5 / (1 - self.gamma) + numpy.random.randn(
-            self.states + 1, self.actions
+        self.punish = kwargs.get("punish", 0)
+        self.max_punish = kwargs.get("max_punish", 10)
+        self.min_wait = kwargs.get("min_wait", self.max_punish + 1)
+        self.wait = 0
+        self.table = 10 / (1 - self.gamma) + numpy.random.randn(
+            self.states, self.actions
         )
         self.action_space = numpy.arange(0, self.actions)
         self.min_memory = kwargs.get("min_memory", 100)
@@ -47,16 +51,21 @@ class QTable:
         self.counter = 0 * self.table
 
     def encode(self, state):
-        astate = numpy.round(state / self.max_state * self.states).astype("int64")
-        return astate
-
-    def scale(self, actions):
-        return (
-            actions
-            / (self.actions - 1.0)
-            * (self.action_range[1] - self.action_range[0])
-            + self.action_range[0]
+        state = numpy.reshape(state, [-1, self.statelen])
+        out = numpy.zeros(
+            state.shape[0],
         )
+        for i in range(state.shape[1]):
+            out += state[:, i] * self.actions**i
+        return out.astype(int)
+
+    def scale(self, action):
+        if action == 0:
+            return [1, 0]
+        scaled = (action - 1) / (self.actions - 2) * (
+            self.action_range[1] - self.action_range[0]
+        ) + self.action_range[0]
+        return [0, scaled]
 
     def train_net(self):
         if len(self.memory) >= self.min_memory:
@@ -66,9 +75,7 @@ class QTable:
             [actions, not_done, rewards] = [
                 numpy.reshape(x, [-1]) for x in [acts, not_done, rwrd]
             ]
-
             old_value = self.table[state, actions]
-
             for ns, ov, re, st, ac in zip(
                 next_state, old_value, rewards, state, actions
             ):
@@ -83,6 +90,12 @@ class QTable:
         self.epsilon = self.eps_end + (self.epsilon - self.eps_end) * self.eps_step
 
     def sample_action(self, state):
+        if self.punish > 1:
+            self.punish -= 1
+            return 0
+        if self.punish == 1:
+            self.punish -= 1
+            return 1
         if random.uniform(0, 1) < self.epsilon:
             action = random.choice(self.action_space)
         else:
@@ -91,20 +104,35 @@ class QTable:
             else:
                 st = state
             action = numpy.argmax(self.table[self.encode(st)])
+        if action == 0:
+            if self.wait < self.min_wait:
+                action = 1
+                self.wait += 1
+            else:
+                self.punish = self.max_punish
+                self.wait = 0
+        else:
+            self.wait += 1
         return action
 
     def get_action(self, state):
-        return numpy.argmax(self.table[self.encode(state)])
+        if self.punish:
+            action = 0
+            self.punish -= 1
+        action = numpy.argmax(self.table[self.encode(state)])
+        if action == 0:
+            self.punish = self.max_punish
+        return action
 
     def reset(self, eps_end):
-        self.table = 100 / (1 - self.gamma) + numpy.random.randn(
+        self.table = 10 / (1 - self.gamma) + numpy.random.randn(
             self.states, self.actions
-        )  # numpy.zeros([states, actions])#
+        )
         self.epsilon = 1.0
         self.eps_end = eps_end
 
     def reset_value(self, eps_end):
-        self.table = 100 / (1 - self.gamma) + numpy.random.randn(
+        self.table = 10 / (1 - self.gamma) + numpy.random.randn(
             self.states, self.actions
         )  # numpy.zeros([states, actions])#
 
@@ -119,210 +147,6 @@ class QTable:
     def load(self, loc):
         self.table = numpy.load(loc + ".npy")
         self.counter = numpy.load(loc + "_counter.npy")
-
-
-class TTable:
-    def __init__(self, **kwargs):
-        self.gamma = kwargs.get("gamma", 0.95)
-        self.actions = kwargs.get("actions", 20)
-        self.epsilon = kwargs.get("epsilon", 1.0)
-        self.eps_step = kwargs.get("eps_step", 0.9995)
-        self.eps_end = kwargs.get("eps_end", 0.01)
-        self.states = kwargs.get("states", 1)
-        self.alpha = kwargs.get("alpha", 0.1)
-        self.action_range = kwargs.get("action_range", [0, 1])
-        self.max_state = kwargs.get("max_state", 1)
-        self.table = 12.5 / (1 - self.gamma) + numpy.random.randn(
-            self.states + 1, self.actions
-        )
-        self.action_space = numpy.arange(0, self.actions)
-        self.min_memory = kwargs.get("min_memory", 100)
-        self.experience = namedtuple(
-            "Experience", field_names=["state", "action", "reward", "done", "new_state"]
-        )
-        self.memory = eval(kwargs.get("buffer", "ReplayBuffer"))(
-            kwargs.get("capacity", 100), self.experience
-        )
-        self.counter = 0 * self.table
-
-    def encode(self, state):
-        astate = numpy.round(state / self.max_state * self.states).astype("int64")
-        return astate
-
-    def scale(self, actions):
-        return (
-            actions
-            / (self.actions - 1.0)
-            * (self.action_range[1] - self.action_range[0])
-            + self.action_range[0]
-        )
-
-    def train_net(self):
-        if len(self.memory) >= self.min_memory:
-            state, acts, rwrd, not_done, next_state = self.memory.replay()
-            state = self.encode(numpy.array(state))
-            next_state = self.encode(numpy.array(next_state))
-            [actions, not_done, rewards] = [
-                numpy.reshape(x, [-1]) for x in [acts, not_done, rwrd]
-            ]
-
-            old_value = self.table[state, actions]
-            table, counter = q_train(
-                self.gamma,
-                self.alpha,
-                self.table,
-                self.counter,
-                next_state,
-                old_value,
-                rewards,
-                state,
-                actions,
-            )
-            self.table = table
-            self.counter = counter
-            self.memory.empty()
-        self.epsilon = self.eps_end + (self.epsilon - self.eps_end) * self.eps_step
-
-    def sample_action(self, state):
-        if random.uniform(0, 1) < self.epsilon:
-            action = random.choice(self.action_space)
-        else:
-            if isinstance(state, torch.Tensor):
-                st = state.numpy()
-            else:
-                st = state
-            action = numpy.argmax(self.table[self.encode(st)])
-        return action
-
-    def get_action(self, state):
-        return numpy.argmax(self.table[self.encode(state)])
-
-    def reset(self, eps_end):
-        self.table = 100 / (1 - self.gamma) + numpy.random.randn(
-            self.states, self.actions
-        )  # numpy.zeros([states, actions])#
-        self.epsilon = 1.0
-        self.eps_end = eps_end
-
-    def reset_value(self, eps_end):
-        self.table = 100 / (1 - self.gamma) + numpy.random.randn(
-            self.states, self.actions
-        )  # numpy.zeros([states, actions])#
-
-    def reset_pi(self, eps_end):
-        self.epsilon = 1.0
-        self.eps_end = eps_end
-
-    def save(self, loc):
-        numpy.save(loc, self.table)
-        numpy.save(loc + "_counter", self.counter)
-
-    def load(self, loc):
-        self.table = numpy.load(loc + ".npy")
-        self.counter = numpy.load(loc + "_counter.npy")
-
-
-class Reinforce(nn.Module):
-    def __init__(
-        self,
-        states=4,
-        actions=2,
-        action_range=[0, 1],
-        gamma=0.98,
-        buffer="ReplayBuffer",
-        capacity=50000,
-        min_memory=1000,
-        entropy=0,
-        **kwargs
-    ):
-        super(Reinforce, self).__init__()
-        self.data = []
-        self.gamma = gamma
-        self.action_range = action_range
-        self.actions = actions
-        self.fc1 = nn.Linear(states, 256)
-        self.fc_pi = nn.Linear(256, actions)
-        self.optimizer = optim.Adam(self.parameters(), lr=2e-4)
-        self.experience = namedtuple(
-            "Experience", field_names=["state", "action", "reward", "done", "new_state"]
-        )
-        self.cast = [torch.float, torch.int64, torch.float, torch.float, torch.float]
-        self.memory = eval(buffer)(capacity, self.experience)
-        self.min_memory = min_memory
-        self.entropy = entropy
-
-    def pi(self, x, softmax_dim=0):  # Pi=policy-> Actor
-        x = torch.relu(self.fc1(x))
-        x = self.fc_pi(x)
-        prob = F.softmax(x, dim=softmax_dim)
-        return prob
-
-    def scale(self, action):
-        return (
-            action / self.actions * (self.action_range[1] - self.action_range[0])
-            + self.action_range[0]
-        )
-
-    def sample_action(self, state):
-        prob = self.pi(state)
-        m = Categorical(prob)
-        return m.sample().item()
-
-    def get_action(self, state):
-        pi = self.pi(torch.tensor(state.astype("float32")))
-        m = torch.argmax(pi)
-        return m.item()
-
-    def train_net(self):
-        if len(self.memory) >= self.min_memory:
-            states, actions, rewards, done, s_prime = self.memory.replay(self.cast)
-            [actions, done, rewards] = [
-                torch.reshape(x, [-1, 1]) for x in [actions, done, rewards]
-            ]
-            pi = self.pi(states, softmax_dim=1)
-
-            discounted = rewards[:, 0].clone()
-            for i, r in enumerate(torch.flip(rewards[:, 0], dims=[0])):
-                if i > 0:
-                    discounted[-i - 1] = r + self.gamma * discounted[-i]
-            discounted = (discounted - torch.mean(discounted)) / torch.std(discounted)
-
-            dist = Categorical(probs=pi)
-
-            actor_loss = -torch.mean(dist.log_prob(actions[:, 0]) * discounted)
-            entropy = -torch.mean(dist.entropy())
-
-            loss = actor_loss + self.entropy * entropy
-            self.optimizer.zero_grad()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.parameters(), 1.0)
-            self.optimizer.step()
-            self.memory.empty()
-
-    def reset(self, entropy):
-        self.memory.empty()
-        self.entropy = entropy
-        for layer in self.children():
-            if hasattr(layer, "reset_parameters"):
-                layer.reset_parameters()
-        self.fc_v.bias.data.fill_(1000.0)
-
-    def reset_value(self, entropy):
-        self.memory.empty()
-        self.entropy = entropy
-        self.fc_v.reset_parameters()
-        self.fc_v.bias.data.fill_(1000.0)
-
-    def reset_pi(self, entropy):
-        self.memory.empty()
-        self.entropy = entropy
-        self.fc_pi.reset_parameters()
-
-    def save(self, loc):
-        torch.save(self.state_dict(), loc)
-
-    def load(self, loc):
-        self.load_state_dict(torch.load(loc))
 
 
 class ActorCritic(nn.Module):
