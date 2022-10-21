@@ -13,8 +13,9 @@ from numba import jit
 class TitTat:
     def __init__(self, action_range=[0, 1], **kwargs):
         self.action_range = action_range
-        self.states = kwargs.get("states", 1)
+        self.statelen = kwargs.get("statelen", 1)
         self.action = kwargs.get("action", 0)
+        self.actions = kwargs.get("actions", 20)
         self.experience = namedtuple(
             "Experience", field_names=["state", "action", "reward", "done", "new_state"]
         )
@@ -23,9 +24,11 @@ class TitTat:
             kwargs.get("capacity", 100), self.experience
         )
 
-    def scale(self, action):
+    def scale(self, actions):
         return (
-            action * (self.action_range[1] - self.action_range[0])
+            actions
+            / (self.actions - 1.0)
+            * (self.action_range[1] - self.action_range[0])
             + self.action_range[0]
         )
 
@@ -59,11 +62,12 @@ class QTable:
         self.eps_step = kwargs.get("eps_step", 0.9995)
         self.eps_end = kwargs.get("eps_end", 0.01)
         self.states = kwargs.get("states", 1)
+        self.statelen = kwargs.get("statelen", 1)
         self.alpha = kwargs.get("alpha", 0.1)
         self.action_range = kwargs.get("action_range", [0, 1])
         self.max_state = kwargs.get("max_state", 1)
         self.table = 12.5 / (1 - self.gamma) + numpy.random.randn(
-            self.states + 1, self.actions
+            self.states, self.actions
         )
         self.action_space = numpy.arange(0, self.actions)
         self.min_memory = kwargs.get("min_memory", 100)
@@ -76,8 +80,13 @@ class QTable:
         self.counter = 0 * self.table
 
     def encode(self, state):
-        astate = numpy.round(state / self.max_state * self.states).astype("int64")
-        return astate
+        state = numpy.reshape(state, [-1, self.statelen])
+        out = numpy.zeros(
+            state.shape[0],
+        )
+        for i in range(state.shape[1]):
+            out += state[:, i] * self.actions**i
+        return out.astype(int)
 
     def scale(self, actions):
         return (
