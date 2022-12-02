@@ -657,3 +657,44 @@ class ModelCAC(nn.Module):
 
     def load(self, loc):
         self.load_state_dict(torch.load(loc))
+
+
+class IntentionAgent(nn.Module):
+    def __init__(
+        self,
+        env,        
+        states=4, # [Q1(t-2),Q2(t-2),Q1(t-1),Q2(t-1)]
+        actions=2,
+        action_range=[0, 1],
+        gamma=0.98,
+        buffer="ReplayBuffer",
+        capacity=50000,
+        min_memory=1000,
+        entropy=0,
+        **kwargs,
+    ):
+        super(IntentionAgent, self).__init__()
+        self.fc_intention = nn.Linear(2, 16)
+        self.intention_mu = nn.Linear(16, 1)
+        self.intention_std = nn.Linear(16, 1)        
+        self.fc_value = nn.Linear(2,64)
+   
+    def get_br_nash(self, qs):
+        return (self.env.a-qs*self.env.b)/2/self.env.b
+
+    def get_br_cartel(self, qs):
+        return self.env.a/2/self.env.b - qs*self.env.b
+
+    def get_deltas(self, qs): # [myq(t-2),myq(t-1),hisq(t-2),hisq(t-1)]
+        d1 = qs[:,1] - self.get_br_nash(qs[:,2]) # what i played vs my best response
+        d2 = qs[:,3] - self.get_br_nash(qs[:,0]) # what he played vs his best response
+        return numpy.concatenate([d1,d2])
+
+    def intention(self, deltas):  # Pi=policy-> Actor
+        x = torch.relu(self.fc_intention(deltas))
+        mu = torch.tanh(self.intention_mu(x))
+        std = F.softplus(self.intention_std(x))
+        return mu, std        
+
+    def decision(self, observation): #[his last intention, my new delta]
+        return None
