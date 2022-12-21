@@ -1,4 +1,6 @@
+from base64 import encode
 from collections import namedtuple
+from re import X
 import numpy
 import random
 import torch
@@ -170,7 +172,7 @@ class Reinforce(nn.Module):
         capacity=50000,
         min_memory=1000,
         entropy=0,
-        **kwargs
+        **kwargs,
     ):
         super(Reinforce, self).__init__()
         self.data = []
@@ -273,7 +275,7 @@ class ActorCritic(nn.Module):
         capacity=50000,
         min_memory=1000,
         entropy=0,
-        **kwargs
+        **kwargs,
     ):
         super(ActorCritic, self).__init__()
         self.data = []
@@ -382,7 +384,7 @@ class Const:
         buffer="ReplayBuffer",
         capacity=50000,
         min_memory=1000,
-        **kwargs
+        **kwargs,
     ):
         self.action = kwargs.get("action")
         self.data = []
@@ -400,12 +402,12 @@ class Const:
         )
 
     def sample_action(self, state):
-        return self.action
+        return [1, self.action]
 
     def get_action(self, state):
-        return self.action
+        return [1, self.action]
 
-    def train_net(self, dobreak):
+    def train_net(self):
         return None
 
 
@@ -419,7 +421,7 @@ class CAC(nn.Module):
         capacity=50000,
         min_memory=1000,
         entropy=0,
-        **kwargs
+        **kwargs,
     ):
         super(CAC, self).__init__()
         self.data = []
@@ -536,7 +538,7 @@ class ModelCAC(nn.Module):
         min_memory=1000,
         entropy=0,
         replays=10,
-        **kwargs
+        **kwargs,
     ):
         super(ModelCAC, self).__init__()
         self.data = []
@@ -659,42 +661,190 @@ class ModelCAC(nn.Module):
         self.load_state_dict(torch.load(loc))
 
 
+class ConstIntention(nn.Module):
+    def __init__(
+        self,
+        env,
+        **kwargs,
+    ):
+        super(ConstIntention, self).__init__()
+        self.env = env
+        self.action = kwargs.get("action")
+        self.experience = namedtuple(
+            "Experience", field_names=["state", "action", "reward", "done", "new_state"]
+        )
+        self.memory = eval(kwargs.get("buffer", "ReplayBuffer"))(
+            kwargs.get("capacity", 100), self.experience
+        )
+
+    def get_br_nash(self, qs):
+        return (self.env.a - qs * self.env.b) / 2 / self.env.b
+
+    @property
+    def delta(self):
+        return self.env.a / self.env.b / 8
+
+    def train_net(self):
+        return None
+
+    def sample_action(
+        self, state
+    ):  # [myq(t-3),hisq(t-3),myq(t-2),hisq(t-2),myq(t-1),hisq(t-1)]
+        nash = self.get_br_nash(state[0][-1])
+        if self.action == 0:
+            return [self.action, nash + self.delta]
+        elif self.action == 1:
+            return [self.action, nash]
+        return [self.action, nash + self.delta]
+
+    def get_action(self, state):
+        return self.sample_action(state)
+
+
 class IntentionAgent(nn.Module):
     def __init__(
         self,
-        env,        
-        states=4, # [Q1(t-2),Q2(t-2),Q1(t-1),Q2(t-1)]
-        actions=2,
-        action_range=[0, 1],
-        gamma=0.98,
-        buffer="ReplayBuffer",
-        capacity=50000,
-        min_memory=1000,
-        entropy=0,
+        env,
         **kwargs,
     ):
         super(IntentionAgent, self).__init__()
-        self.fc_intention = nn.Linear(2, 16)
-        self.intention_mu = nn.Linear(16, 1)
-        self.intention_std = nn.Linear(16, 1)        
-        self.fc_value = nn.Linear(2,64)
-   
+        self.env = env
+        self.gamma = kwargs.get("gamma", 0.95)
+        self.alpha = kwargs.get("alpha", 0.15)
+        self.epsilon = kwargs.get("epsilon", 1.0)
+        self.eps_step = kwargs.get("eps_step", 0.9998)
+        self.eps_end = kwargs.get("eps_end", 0.001)
+        self.fc_intention = nn.Linear(4, 16)
+        self.intention_mu = nn.Linear(16, 3)
+        self.Q = numpy.random.rand(243, 3)
+        self.min_memory = kwargs.get("min_memory", 100)
+        self.optimizer = optim.Adam(self.parameters(), lr=2e-4)
+        self.loss_fn = torch.nn.CrossEntropyLoss()
+        self.experience = namedtuple(
+            "Experience", field_names=["state", "action", "reward", "done", "new_state"]
+        )
+        self.memory = eval(kwargs.get("buffer", "ReplayBuffer"))(
+            kwargs.get("capacity", 100), self.experience
+        )
+
     def get_br_nash(self, qs):
-        return (self.env.a-qs*self.env.b)/2/self.env.b
+        return (self.env.a - qs * self.env.b) / 2 / self.env.b
 
-    def get_br_cartel(self, qs):
-        return self.env.a/2/self.env.b - qs*self.env.b
+    @property
+    def delta(self):
+        return self.env.a / self.env.b / 8
 
-    def get_deltas(self, qs): # [myq(t-2),myq(t-1),hisq(t-2),hisq(t-1)]
-        d1 = qs[:,1] - self.get_br_nash(qs[:,2]) # what i played vs my best response
-        d2 = qs[:,3] - self.get_br_nash(qs[:,0]) # what he played vs his best response
-        return numpy.concatenate([d1,d2])
+    def get_deltas(
+        self, qs, tensors=True
+    ):  # [myq(t-3),hisq(t-3),myq(t-2),hisq(t-2),myq(t-1),hisq(t-1)]
+        nash = self.get_br_nash(qs)
+        ix = [[2, 1], [3, 0], [4, 3], [5, 2]]
+        ds = [qs[:, i[0]] - nash[:, i[1]] for i in ix]
+        if tensors:
+            return torch.stack(ds, axis=1)
+        else:
+            return numpy.stack(ds, axis=1)
 
     def intention(self, deltas):  # Pi=policy-> Actor
         x = torch.relu(self.fc_intention(deltas))
-        mu = torch.tanh(self.intention_mu(x))
-        std = F.softplus(self.intention_std(x))
-        return mu, std        
+        mu = F.softmax(self.intention_mu(x), dim=-1)
+        return mu
 
-    def decision(self, observation): #[his last intention, my new delta]
-        return None
+    def sample_action(
+        self, state
+    ):  # [myq(t-3),hisq(t-3),myq(t-2),hisq(t-2),myq(t-1),hisq(t-1)]
+        nash = self.get_br_nash(state[0][-1])
+        if random.uniform(0, 1) < self.epsilon:
+            action = random.randint(0, 2)
+        else:
+            deltas = self.get_deltas(state, tensors=False)
+            ins = torch.Tensor(deltas)
+            intent = self.intention(ins)
+            intent = intent.argmax(dim=-1).numpy()[0]
+            ix = self.encode(intent, deltas[0])
+            action = numpy.argmax(self.Q[ix])
+
+        if action == 0:
+            return [action, max(0, nash + self.delta)]
+        elif action == 1:
+            return [action, nash]
+        return [action, min(self.env.a, nash - self.delta)]
+
+    def get_action(self, state):
+        nash = self.get_br_nash(state[0][-1])
+        deltas = self.get_deltas(state, tensors=False)
+        ins = torch.Tensor(deltas)
+        intent = self.intention(ins)
+        intent = intent.argmax(dim=-1).numpy()[0]
+        ix = self.encode(intent, deltas[0])
+        action = numpy.argmax(self.Q[ix])
+
+        if action == 0:
+            return [action, max(0, nash + self.delta)]
+        elif action == 1:
+            return [action, nash]
+        return [action, min(self.env.a, nash - self.delta)]
+
+    def encode(self, a, ds):
+        qs = str(int(a))
+        for d in ds:
+            if d < 0:
+                qs += "0"
+            elif d > 0:
+                qs += "2"
+            else:
+                qs += "1"
+        return int(qs, 3)
+
+    def train_net(self):
+        if len(self.memory) >= self.min_memory:
+            qs, acts, rwrd, not_done, next_qs = self.memory.replay()
+
+            qs = torch.Tensor(
+                numpy.stack(qs, axis=0)
+            )  # [myq(t-3),hisq(t-3),myq(t-2),hisq(t-2),myq(t-1),hisq(t-1)]
+            deltas = self.get_deltas(
+                qs
+            )  # [mydelta(t-2),hisdelta(t-2),mydelta(t-1),hisdelta(t-1)]
+
+            his_intention = self.intention(deltas)  # [p0,p1,p2]
+            obs = torch.concat([his_intention, deltas], axis=1)
+
+            next_qs = torch.Tensor(next_qs)
+            new_deltas = self.get_deltas(next_qs)
+            new_intention = self.intention(new_deltas)
+            new_obs = torch.concat([new_intention, new_deltas], axis=1)  # [1,0,1]
+
+            # Intention loss
+            y = 1 + new_deltas[:, -1].sign()
+            loss = self.loss_fn(his_intention, y.type(torch.LongTensor))
+
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
+
+            # QTable update
+            """
+            Q[(0,1,1),action[0]] = alpha*Q[(0,1,1),action[0]] + (1-alpha)*(
+                rewards[0] + gamma* (
+                    max(p*Q([0,0,1], :)+(1-p)*Q([1,0,1], :))
+                )            
+            )
+            """
+            for a, prob, r, row, newrow in zip(
+                acts,
+                his_intention.detach().numpy(),
+                rwrd,
+                obs[:, 3:].detach().numpy(),
+                new_obs[:, 3:].detach().numpy(),
+            ):
+                ix = self.encode(prob.argmax(), row)
+                nextQ = sum(
+                    [prob[i] * self.Q[self.encode(i, newrow)] for i in range(3)]
+                )
+                self.Q[ix, a] = self.alpha * self.Q[ix, a] + (1 - self.alpha) * (
+                    r + self.gamma * max(nextQ)
+                )
+
+            self.memory.empty()
+            self.epsilon = self.eps_end + (self.epsilon - self.eps_end) * self.eps_step
