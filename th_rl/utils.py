@@ -1,6 +1,3 @@
-from re import I
-from turtle import bgcolor, fillcolor
-from matplotlib.pyplot import axis, xlim, ylim
 import numpy
 from th_rl.trainer import create_game
 import os
@@ -12,6 +9,10 @@ import plotly.express as px
 from tqdm import tqdm, trange
 from collections import deque
 import torch
+
+HEIGHT = 600
+WIDTH = 600
+WRITE = r"C:\temp"
 
 
 def load_experiment(loc):
@@ -29,108 +30,29 @@ def load_experiment(loc):
     return config, agents, environment, actions, rewards
 
 
-def play_game(agents, environment, config, iters=1):
-    game_name = config["training"]["name"]
-    game = eval("play_" + game_name)
-    return game(agents, environment, config)
-
-
-def play_stateless(agents, environment, config):
+def play_game(agents, environment, iters=1):
     rewards, actions = [], []
-    iters = config.get("iters", 1)
     for i in range(iters):
         done = False
+        state = environment.reset()
+        next_state = state
         A, R = [], []
         while not done:
             # choose actions
-            acts = [agent.get_action(1.0) for agent in agents]
+            acts = [agent.get_action(next_state) for agent in agents]
+            # acts = [
+            #    agent.sample_action(torch.from_numpy(next_state).float())
+            #    for agent in agents
+            # ]
             scaled_acts = [agent.scale(act) for agent, act in zip(agents, acts)]
 
             # Step through environment
-            _, reward, done = environment.step(torch.tensor(scaled_acts))
-            R.append(reward.numpy())
+            next_state, reward, done = environment.step(scaled_acts)
+            R.append(reward)
             A.append(scaled_acts)
         rewards.append(R)
         actions.append(A)
     return numpy.stack(actions, axis=2), numpy.stack(rewards, axis=2)
-
-
-def play_perfectmonitoring(agents, environment, config):
-    rewards, actions = [], []
-    lag = config["training"].get("lag", 0)
-    iters = config.get("iters", 1)
-    if lag == 0:
-        buffer = deque(maxlen=1)
-    else:
-        buffer = deque(maxlen=lag * environment.max_steps)
-
-    for i in trange(iters + lag):
-        done = False
-        state = torch.Tensor([1.0, 1.0])
-        A, R = [], []
-        environment.reset()
-        while not done:
-            # choose actions
-            acts = [agent.sample_action(x) for agent, x in zip(agents, state)]
-            scaled_acts = [agent.scale(act) for agent, act in zip(agents, acts)]
-            # Step through environment
-            _, reward, done = environment.step(torch.tensor(scaled_acts))
-            R.append(reward.numpy())
-            A.append(scaled_acts)
-            buffer.append(scaled_acts)
-            if i >= lag:
-                state = buffer[0][::-1]
-
-        rewards.append(R)
-        actions.append(A)
-    actions, rewards = numpy.concatenate(actions, axis=0), numpy.concatenate(
-        rewards, axis=0
-    )
-    return actions[:, :, None], rewards[:, :, None]
-
-
-def play_selfmonitoring(agents, environment, config):
-    rewards, actions = [], []
-    lag = config.get("lag", 0)
-    iters = config.get("iters", 1)
-    if lag == 0:
-        buffer = deque(maxlen=1)
-    else:
-        buffer = deque(maxlen=lag * environment.max_steps)
-    for i in range(iters):
-        done = False
-        state = torch.Tensor([1.0, 1.0])
-        A, R = [], []
-        while not done:
-            # choose actions
-            acts = [agent.sample_action(x) for agent, x in zip(agents, state)]
-            scaled_acts = [agent.scale(act) for agent, act in zip(agents, acts)]
-            state = scaled_acts
-            # Step through environment
-            _, reward, done = environment.step(torch.tensor(scaled_acts))
-            R.append(reward.numpy())
-            A.append(scaled_acts)
-            buffer.append(scaled_acts)
-            if i >= lag:
-                state = buffer[0]
-        rewards.append(R)
-        actions.append(A)
-    return numpy.stack(actions, axis=2), numpy.stack(rewards, axis=2)
-
-
-def plot_surface(mat, xlabel="", ylabel="", zlabel="", title=""):
-    x = numpy.arange(0, mat.shape[0])
-    y = numpy.arange(0, mat.shape[1])
-    fig = go.Figure()
-    fig.add_trace(go.Surface(z=mat, x=x, y=y))
-    fig.update_layout(
-        scene=dict(xaxis_title=xlabel, yaxis_title=ylabel, zaxis_title=zlabel),
-        title=title,
-        width=700,
-        height=600,
-        margin=dict(r=20, b=10, l=10, t=30),
-    )
-    fig.show()
 
 
 def plot_matrix(
@@ -148,8 +70,8 @@ def plot_matrix(
     fig.update_layout(
         scene=dict(xaxis_title=xlabel, yaxis_title=ylabel, zaxis_title=zlabel),
         title=title,
-        width=700,
-        height=600,
+        height=HEIGHT,
+        width=WIDTH,
         margin=dict(r=20, b=10, l=10, t=30),
     )
     if return_fig:
@@ -187,8 +109,8 @@ def plot_trajectory(actions, rewards, title="", return_fig=False):
     rpd = rewards
     apd = actions
     rpd["Total"] = rpd.sum(axis=1)
-    rpd["Nash"] = 1.25
-    rpd["Cartel"] = 2.46
+    rpd["Nash"] = 22.22
+    rpd["Cartel"] = 25
 
     fig = make_subplots(
         rows=2,
@@ -214,13 +136,15 @@ def plot_trajectory(actions, rewards, title="", return_fig=False):
             col=1,
         )
     fig.update_layout(
-        height=600,
-        width=600,
+        height=HEIGHT,
+        width=WIDTH,
         # title_text=title
     )
     if return_fig:
         return fig
     fig.show()
+    if WRITE:
+        fig.write_image(os.path.join(WRITE, title + ".svg"))
 
 
 def plot_learning_curve(loc, return_fig=False):
@@ -239,20 +163,22 @@ def plot_learning_curve_conf(loc, return_fig=False):
     for f in os.listdir(loc):
         log = pandas.read_csv(os.path.join(loc, f, "log.csv"))
         rewards.append(
-            log[["rewards", "rewards.1"]].ewm(halflife=10).mean().sum(axis=1)
+            log[["rewards", "rewards.1"]].ewm(halflife=1000).mean().sum(axis=1)
         )
     rewards = pandas.concat(rewards, axis=1)
     plotdata = pandas.DataFrame()
     plotdata["median"] = rewards.quantile(0.5, axis=1)
     plotdata["75th"] = rewards.quantile(0.75, axis=1)
     plotdata["25th"] = rewards.quantile(0.25, axis=1)
-    plotdata["Nash"] = 1.25
-    plotdata["Cartel"] = 2.46
-    fig = px.line(plotdata, width=500, height=500, title=os.path.basename(loc))
-    # fig.update_yaxes(range=[10, 25])
+    plotdata["Nash"] = 22.22
+    plotdata["Cartel"] = 25
+    fig = px.line(plotdata, height=HEIGHT, width=WIDTH, title=os.path.basename(loc))
+    fig.update_yaxes(range=[10, 25])
     if return_fig:
         return fig
     fig.show()
+    if WRITE:
+        fig.write_image(os.path.join(WRITE, "learning curve conf.svg"))
 
 
 def plot_multi_lc_area(
@@ -268,6 +194,8 @@ def plot_multi_lc_area(
     return_fig=False,
     x=0.52,
     y=0.02,
+    xlabel="",
+    ylabel="",
 ):
     fig = go.Figure()
     for i, e in enumerate(exp):
@@ -298,19 +226,25 @@ def plot_multi_lc_area(
     )
     fig.update_yaxes(range=[15, 25.1])
     fig.update_layout(
-        height=600,
-        width=600,
+        height=HEIGHT,
+        width=WIDTH,
         # title_text=title,
         title_x=0.5,
         legend=dict(y=y, x=x),
+        xaxis_title=xlabel,
+        yaxis_title=ylabel,
     )
 
     if return_fig:
         return fig
     fig.show()
+    if WRITE:
+        fig.write_image(os.path.join(WRITE, title + ".svg"))
 
 
-def plot_learning_curve_area(loc, names, title="", return_fig=False, x=0.52, y=0.02):
+def plot_learning_curve_area(
+    loc, names, title="", return_fig=False, x=0.52, y=0.02, xlabel="", ylabel=""
+):
     fig = go.Figure()
     rewards = []
     for f in os.listdir(loc):
@@ -343,16 +277,20 @@ def plot_learning_curve_area(loc, names, title="", return_fig=False, x=0.52, y=0
     )
     fig.update_yaxes(range=[0, 25.1])
     fig.update_layout(
-        height=600,
-        width=600,
+        height=HEIGHT,
+        width=WIDTH,
         # title_text=title,
         title_x=0.5,
         legend=dict(y=y, x=x),
+        xaxis_title=xlabel,
+        yaxis_title=ylabel,
     )
 
     if return_fig:
         return fig
     fig.show()
+    if WRITE:
+        fig.write_image(os.path.join(WRITE, title + ".svg"))
 
 
 def add_conf_area(fig, data, color, name):
@@ -402,23 +340,21 @@ def plot_learning_curve_sweep(loc, return_fig=False, x=0.3, y=0.02):
         plotdata[e + "-median"] = rewards.quantile(0.5, axis=1)
         # plotdata[e+'-75th'] = rewards.quantile(0.75,axis=1)
         # plotdata[e+'-25th'] = rewards.quantile(0.25,axis=1)
-    plotdata["Nash"] = 1.25
-    plotdata["Cartel"] = 2.46
+    plotdata["Nash"] = 22.22
+    plotdata["Cartel"] = 25
     fig = px.line(
         plotdata,
-        width=500,
-        height=500,
+        height=HEIGHT,
+        width=WIDTH,
         title="Learning Curve " + os.path.basename(loc),
     )
-
-    fig.update_yaxes(range=[0, 2.5])
+    fig.update_yaxes(range=[10, 25])
     #  position legends inside a plot
     fig.update_layout(
         legend=dict(
             x=x,  # value must be between 0 to 1.
             y=y,  # value must be between 0 to 1.
             traceorder="normal",
-            bgcolor="rgba(250,250,250,0.5)",
             font=dict(family="sans-serif", size=10, color="black"),
         )
     )
@@ -429,12 +365,9 @@ def plot_learning_curve_sweep(loc, return_fig=False, x=0.3, y=0.02):
 
 def plot_experiment(loc, return_fig=False):
     config, agents, environment, _, _ = load_experiment(loc)
-    names = [a["name"] + str(i) for i, a in enumerate(config["agents"])]
-    actions, rewards = play_game(agents, environment, config)
+    actions, rewards = play_game(agents, environment)
     breakpoint()
-    actions = pandas.DataFrame(data=actions[:, :, 0], columns=names)
-    rewards = pandas.DataFrame(data=rewards[:, :, 0], columns=names)
-    return plot_trajectory(actions, rewards, loc, return_fig)
+    return plot_trajectory(rewards, actions, loc, return_fig)
 
 
 def plot_mean_result(loc, return_fig=False):
@@ -442,7 +375,7 @@ def plot_mean_result(loc, return_fig=False):
     rewards, actions = 0, 0
     for exp in expi:
         config, agents, environment, _, _ = load_experiment(os.path.join(loc, exp))
-        acts, rwds = play_game(agents, environment, config)
+        acts, rwds = play_game(agents, environment)
         rewards += rwds.mean(axis=-1)
         actions += acts.mean(axis=-1)
     return plot_trajectory(
@@ -458,7 +391,7 @@ def plot_mean_conf(loc, return_fig=False):
     rewards, actions = [], []
     for exp in expi:
         config, agents, environment, _, _ = load_experiment(os.path.join(loc, exp))
-        acts, rwds = play_game(agents, environment, config)
+        acts, rwds = play_game(agents, environment)
         rewards.append(rwds.mean(axis=-1).sum(axis=1))
         actions.append(acts.mean(axis=-1))
     rewards = pandas.DataFrame(data=numpy.stack(rewards, axis=0))
@@ -467,10 +400,10 @@ def plot_mean_conf(loc, return_fig=False):
     plotdata["median"] = rewards.quantile(0.5, axis=0)
     plotdata["75th"] = rewards.quantile(0.75, axis=0)
     plotdata["25th"] = rewards.quantile(0.25, axis=0)
-    plotdata["Nash"] = 1.25
-    plotdata["Cartel"] = 2.46
-    fig = px.line(plotdata, width=500, height=500, title=os.path.basename(loc))
-    fig.update_yaxes(range=[0, 2.46])
+    plotdata["Nash"] = 22.22
+    plotdata["Cartel"] = 25
+    fig = px.line(plotdata, height=HEIGHT, width=WIDTH, title=os.path.basename(loc))
+    fig.update_yaxes(range=[10, 25])
     if return_fig:
         return fig
     fig.show()
@@ -496,7 +429,7 @@ def plot_sweep_conf(loc, return_fig=False):
             config, agents, environment, _, _ = load_experiment(
                 os.path.join(exp_loc, exp)
             )
-            acts, rwds = play_game(agents, environment, config)
+            acts, rwds = play_game(agents, environment)
             rewards.append(rwds.mean(axis=-1).sum(axis=1))
         rewards = numpy.stack(rewards, axis=0)
         pt = numpy.percentile(rewards, 50, axis=1)
@@ -505,7 +438,7 @@ def plot_sweep_conf(loc, return_fig=False):
     plotdata["Nash"] = 22.22
     plotdata["Cartel"] = 25
     plotdata.index = os.listdir(loc)
-    fig = px.line(plotdata, width=500, height=500, title=os.path.basename(loc))
+    fig = px.line(plotdata, height=HEIGHT, width=WIDTH, title=os.path.basename(loc))
     fig.update_yaxes(range=[10, 25])
     if return_fig:
         return fig
@@ -528,6 +461,8 @@ def box_plot_sweep(
     iters=1,
     x=0.01,
     y=0.01,
+    xlabel="",
+    ylabel="",
 ):
     rewards = []
     for iloc in exp:
@@ -539,13 +474,14 @@ def box_plot_sweep(
             config, agents, environment, _, _ = load_experiment(
                 os.path.join(exp_loc, exp)
             )
-            _, rwds = play_game(agents, environment, config)
+            _, rwds = play_game(agents, environment, iters=iters)
             exp_reward.append(
                 numpy.percentile(rwds.sum(axis=1), 50, axis=0, keepdims=True)
             )
         exp_reward = numpy.stack(exp_reward, axis=0)
         rewards.append(exp_reward.reshape([-1, exp_reward.shape[1]]))
     rewards = numpy.concatenate(rewards, axis=-1)
+    breakpoint()
 
     if coll_rate_scale:
         ylim = [-1, 1]
@@ -556,15 +492,19 @@ def box_plot_sweep(
     [fig.add_trace(go.Box(y=rewards[:, i], name=name)) for i, name in enumerate(names)]
     fig.update_yaxes(range=ylim)
     fig.update_layout(
-        height=600,
-        width=600,
+        height=HEIGHT,
+        width=WIDTH,
         # title_text=title,
         title_x=0.5,
         legend=dict(x=x, y=y),
+        xaxis_title=xlabel,
+        yaxis_title=ylabel,
     )
     if return_fig:
         return fig
     fig.show()
+    if WRITE:
+        fig.write_image(os.path.join(WRITE, title + ".svg"))
 
 
 def box_plot_player(
@@ -577,13 +517,15 @@ def box_plot_player(
     iters=1,
     x=0.6,
     y=0.02,
+    xlabel="",
+    ylabel="",
 ):
     exp_loc = os.path.join(loc, exp)
     exp_reward = []
 
     for exp in tqdm(os.listdir(exp_loc)):
         config, agents, environment, _, _ = load_experiment(os.path.join(exp_loc, exp))
-        _, rwds = play_game(agents, environment, config)
+        _, rwds = play_game(agents, environment, iters=iters)
         exp_reward.append(numpy.percentile(rwds, 50, axis=0))
 
     exp_reward = numpy.stack(exp_reward, axis=0)
@@ -597,15 +539,19 @@ def box_plot_player(
     ]
     fig.update_yaxes(range=ylim)
     fig.update_layout(
-        height=600,
-        width=600,
+        height=HEIGHT,
+        width=WIDTH,
         # title_text=title,
         title_x=0.5,
         legend=dict(y=y, x=x),
+        xaxis_title=xlabel,
+        yaxis_title=ylabel,
     )
     if return_fig:
         return fig
     fig.show()
+    if WRITE:
+        fig.write_image(os.path.join(WRITE, title + ".svg"))
 
 
 def plot_cac_mu(loc, return_fig=False):
