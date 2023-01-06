@@ -895,8 +895,8 @@ class Intention3(nn.Module):
     ):  # [myq(t-3),hisq(t-3),myq(t-2),hisq(t-2),myq(t-1),hisq(t-1)]
         nash = self.get_br_nash(qs)
 
-        mydeltas = [qs[:, i] - nash[:, i - 1] for i in range(2, 2*self.lookback, 2)]
-        hisdeltas = [qs[:, i] - nash[:, i - 3] for i in range(3, 2*self.lookback, 2)]
+        mydeltas = [qs[:, i] - nash[:, i - 1] for i in range(2, 2 * self.lookback, 2)]
+        hisdeltas = [qs[:, i] - nash[:, i - 3] for i in range(3, 2 * self.lookback, 2)]
         ds = mydeltas + hisdeltas
         if tensors:
             return torch.stack(ds, axis=1)
@@ -950,16 +950,11 @@ class Intention3(nn.Module):
         if len(self.memory) >= self.min_memory:
             qs, acts, rwrd, not_done, next_qs = self.memory.replay()
 
-            qs = torch.Tensor(
-                numpy.stack(qs, axis=0)
-            )  # [myq(t-3),hisq(t-3),myq(t-2),hisq(t-2),myq(t-1),hisq(t-1)]
-            deltas = self.get_deltas(
-                qs
-            )  # [mydelta(t-2),hisdelta(t-2),mydelta(t-1),hisdelta(t-1)]
-
+            qs = torch.Tensor(numpy.stack(qs, axis=0))
+            deltas = self.get_deltas(qs)
             his_intention = self.intention(deltas)  # [p0,p1,p2]
 
-            next_qs = torch.Tensor(next_qs)
+            next_qs = torch.Tensor(numpy.stack(next_qs, axis=0))
             new_deltas = self.get_deltas(next_qs)
             new_intention = self.intention(new_deltas)
 
