@@ -865,14 +865,19 @@ class Intention3(nn.Module):
         super(Intention3, self).__init__()
         self.env = env
         self.lookback = kwargs.get("lookback", 3)
-        self.gamma = kwargs.get("gamma", 0.95)
-        self.alpha = kwargs.get("alpha", 0.15)
+        self.gamma = kwargs.get("gamma", 0.9)
+        self.alpha = kwargs.get("alpha", 0.1)
         self.epsilon = kwargs.get("epsilon", 1.0)
         self.eps_step = kwargs.get("eps_step", 0.9998)
         self.eps_end = kwargs.get("eps_end", 0.001)
         self.fc_intention = nn.Linear(2 * (self.lookback - 1), 16)
         self.intention_mu = nn.Linear(16, 3)
-        self.Q = numpy.random.rand(3, 3)
+        self.Q = -numpy.random.rand(3, 3) + numpy.random.rand(3, 3) * 11.1111111 / (
+            1 - self.gamma
+        )
+        self.Q[2, 2] = 12.5 / (1 - self.gamma)
+        self.Q[1, 1] = 11.1111111 / (1 - self.gamma)
+        self.Q[0, 0] = 3.81944444 / (1 - self.gamma)
         self.min_memory = kwargs.get("min_memory", 100)
         self.optimizer = optim.Adam(self.parameters(), lr=2e-4)
         self.loss_fn = torch.nn.CrossEntropyLoss()
@@ -904,7 +909,7 @@ class Intention3(nn.Module):
             return numpy.stack(ds, axis=1)
 
     def intention(self, deltas):  # Pi=policy-> Actor
-        x = torch.relu(self.fc_intention(deltas))
+        x = torch.tanh(self.fc_intention(deltas))
         mu = F.softmax(self.intention_mu(x), dim=-1)
         return mu
 
@@ -980,6 +985,9 @@ class Intention3(nn.Module):
                 self.Q[ix, a] = self.alpha * self.Q[ix, a] + (1 - self.alpha) * (
                     r + self.gamma * max(nextQ)
                 )
-
+                # nextQ = sum([newprob[i] * max(self.Q[i]) for i in range(3)])
+                # self.Q[ix, a] = self.alpha * self.Q[ix, a] + (1 - self.alpha) * (
+                #    r + self.gamma * nextQ
+                # )
             self.memory.empty()
             self.epsilon = self.eps_end + (self.epsilon - self.eps_end) * self.eps_step
