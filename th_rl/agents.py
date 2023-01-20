@@ -913,9 +913,7 @@ class Intention3(nn.Module):
         mu = F.softmax(self.intention_mu(x), dim=-1)
         return mu
 
-    def sample_action(
-        self, state
-    ):  # [myq(t-3),hisq(t-3),myq(t-2),hisq(t-2),myq(t-1),hisq(t-1)]
+    def sample_action(self, state):
         nash = self.get_br_nash(state[0][-1])
         if random.uniform(0, 1) < self.epsilon:
             action = random.randint(0, 2)
@@ -927,6 +925,7 @@ class Intention3(nn.Module):
             ix = self.encode(intent)
             action = numpy.argmax(self.Q[ix])
 
+        self.current_intention = action
         if action == 0:
             return [action, max(0, nash + self.delta)]
         elif action == 1:
@@ -982,7 +981,138 @@ class Intention3(nn.Module):
             ):
                 ix = self.encode(prob.argmax())
                 nextQ = sum([newprob[i] * self.Q[i] for i in range(3)])
-                self.Q[ix, a] = self.alpha * self.Q[ix, a] + (1 - self.alpha) * (
+                self.Q[ix, a] = (1 - self.alpha) * self.Q[ix, a] + self.alpha * (
+                    r + self.gamma * max(nextQ)
+                )
+                # nextQ = sum([newprob[i] * max(self.Q[i]) for i in range(3)])
+                # self.Q[ix, a] = self.alpha * self.Q[ix, a] + (1 - self.alpha) * (
+                #    r + self.gamma * nextQ
+                # )
+            self.memory.empty()
+            self.epsilon = self.eps_end + (self.epsilon - self.eps_end) * self.eps_step
+
+
+class Intention_step(nn.Module):
+    def __init__(
+        self,
+        env,
+        **kwargs,
+    ):
+        super(Intention_step, self).__init__()
+        self.env = env
+        self.lookback = kwargs.get("lookback", 3)
+        self.gamma = kwargs.get("gamma", 0.9)
+        self.alpha = kwargs.get("alpha", 0.1)
+        self.epsilon = kwargs.get("epsilon", 1.0)
+        self.eps_step = kwargs.get("eps_step", 0.9998)
+        self.eps_end = kwargs.get("eps_end", 0.001)
+        self.step = kwargs.get("step", 0.1)
+        self.fc_intention = nn.Linear(2 * self.lookback, 16)
+        self.intention_mu = nn.Linear(16, 3)
+        self.Q = -numpy.random.rand(3, 3) + numpy.random.rand(3, 3) * 11.1111111 / (
+            1 - self.gamma
+        )
+        self.Q[2, 2] = 12.5 / (1 - self.gamma)
+        self.Q[1, 1] = 11.1111111 / (1 - self.gamma)
+        self.Q[0, 0] = 3.81944444 / (1 - self.gamma)
+        self.min_memory = kwargs.get("min_memory", 100)
+        self.optimizer = optim.Adam(self.parameters(), lr=2e-4)
+        self.loss_fn = torch.nn.CrossEntropyLoss()
+        self.experience = namedtuple(
+            "Experience", field_names=["state", "action", "reward", "done", "new_state"]
+        )
+        self.memory = eval(kwargs.get("buffer", "ReplayBuffer"))(
+            kwargs.get("capacity", 100), self.experience
+        )
+
+    def get_br_nash(self):
+        return [20 / 3 - 2.5, 10 / 3, 2.5]
+
+    def intention(self, deltas):  # Pi=policy-> Actor
+        x = torch.tanh(self.fc_intention(deltas))
+        mu = F.softmax(self.intention_mu(x), dim=-1)
+        return mu
+
+    def sample_action(
+        self, state
+    ):  # [myq(t-3),hisq(t-3),myq(t-2),hisq(t-2),myq(t-1),hisq(t-1)]
+        [compete, nash, collude] = self.get_br_nash()
+        if random.uniform(0, 1) < self.epsilon:
+            action = random.randint(0, 2)
+        else:
+            ins = torch.Tensor(state)
+            intent = self.intention(ins)
+            intent = intent.argmax(dim=-1).numpy()[0]
+            ix = self.encode(intent)
+            action = numpy.argmax(self.Q[ix])
+
+        mylast = state[0][-2]
+        if action == 0:
+            return [action, (1 - self.step) * mylast + self.step * compete]
+        elif action == 1:
+            return [action, (1 - self.step) * mylast + self.step * nash]
+        return [action, (1 - self.step) * mylast + self.step * collude]
+
+    def get_action(self, state):
+        nash = self.get_br_nash(state[0][-1])
+        deltas = self.get_deltas(state, tensors=False)
+        ins = torch.Tensor(deltas)
+        intent = self.intention(ins)
+        intent = intent.argmax(dim=-1).numpy()[0]
+        ix = self.encode(intent)
+        action = numpy.argmax(self.Q[ix])
+
+        if action == 0:
+            return [action, max(0, nash + self.delta)]
+        elif action == 1:
+            return [action, nash]
+        return [action, min(self.env.a, nash - self.delta)]
+
+    def encode(self, a):
+        return int(a)
+
+    def train_net(self):
+        if len(self.memory) >= self.min_memory:
+            qs, acts, rwrd, not_done, next_qs = self.memory.replay()
+
+            qs = torch.Tensor(numpy.stack(qs, axis=0))
+            his_intention = self.intention(qs)  # [p0,p1,p2]
+
+            next_qs = torch.Tensor(numpy.stack(next_qs, axis=0))
+            new_intention = self.intention(next_qs)
+
+            # Intention loss
+            last = qs[:, -1]
+            nextlast = next_qs[:, -1]
+            mat = (
+                torch.stack(
+                    [
+                        (1 - self.step) * last + self.step * anchor
+                        for anchor in self.get_br_nash()
+                    ],
+                    axis=1,
+                )
+                - nextlast[:, None]
+            )
+            mat = torch.abs(mat)
+
+            y = torch.argmin(mat, axis=1)
+            loss = self.loss_fn(his_intention, y)
+
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
+
+            # QTable update
+            for a, prob, r, newprob in zip(
+                acts,
+                his_intention.detach().numpy(),
+                rwrd,
+                new_intention.detach().numpy(),
+            ):
+                ix = self.encode(prob.argmax())
+                nextQ = sum([newprob[i] * self.Q[i] for i in range(3)])
+                self.Q[ix, a] = (1 - self.alpha) * self.Q[ix, a] + self.alpha * (
                     r + self.gamma * max(nextQ)
                 )
                 # nextQ = sum([newprob[i] * max(self.Q[i]) for i in range(3)])
