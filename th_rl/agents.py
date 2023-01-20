@@ -346,10 +346,10 @@ class CAC(nn.Module):
         self.data = []
         self.gamma = gamma
         self.action_range = action_range
-        self.fc1 = nn.Linear(states, 256)
-        self.fc_mu = nn.Linear(256, 1)
-        self.fc_std = nn.Linear(256, 1)
-        self.fc_v = nn.Linear(256, 1)
+        self.fc1 = nn.Linear(states, 128)
+        self.fc_mu = nn.Linear(128, 1)
+        self.fc_std = nn.Linear(128, 1)
+        self.fc_v = nn.Linear(128, 1)
         self.optimizer = optim.Adam(self.parameters(), lr=2e-4)
         self.experience = namedtuple(
             "Experience", field_names=["state", "action", "reward", "done", "new_state"]

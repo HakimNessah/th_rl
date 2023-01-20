@@ -10,6 +10,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
 from tqdm import tqdm
+from plotly.graph_objects import Layout
 
 HEIGHT = 600
 WIDTH = 600
@@ -478,7 +479,16 @@ def box_plot_sweep(
                 numpy.percentile(rwds.sum(axis=1), 50, axis=0, keepdims=True)
             )
         exp_reward = numpy.stack(exp_reward, axis=0)
-        rewards.append(exp_reward.reshape([-1, exp_reward.shape[1]]))
+        # Reformat to 100
+        thisr = exp_reward.reshape([-1, exp_reward.shape[1]])
+        if thisr.shape[0] > 100:
+            thisr = thisr[:100]
+        if thisr.shape[0] < 100:
+            num = int(100 / thisr.shape[0]) + 1
+            thisr = numpy.concatenate([thisr] * num, axis=0)
+            thisr = thisr[:100]
+        rewards.append(thisr)
+
     rewards = numpy.concatenate(rewards, axis=-1)
 
     if coll_rate_scale:
@@ -486,15 +496,44 @@ def box_plot_sweep(
         rewards = (rewards - 22.22222) / (25 - 22.22222)
     else:
         ylim = [20, 25]
-    fig = go.Figure()
-    [fig.add_trace(go.Box(y=rewards[:, i], name=name)) for i, name in enumerate(names)]
-    fig.update_yaxes(range=ylim)
+
+    layout = Layout(plot_bgcolor="rgba(0,0,0,0)")
+
+    fig = go.Figure(layout=layout)
+    [
+        fig.add_trace(
+            go.Box(
+                y=rewards[:, i],
+                name=name,
+                fillcolor="rgb(180,180,180)",
+                marker={"color": "rgb(50,50,50)", "size": 1},
+            )
+        )
+        for i, name in enumerate(names)
+    ]
+    fig.update_yaxes(
+        range=ylim,
+        linecolor="black",
+        showgrid=True,
+        gridwidth=1,
+        linewidth=1,
+        gridcolor="rgb(150,150,150)",
+        zerolinecolor="black",
+    )
+    fig.update_xaxes(
+        linecolor="black",
+        showgrid=True,
+        gridwidth=1,
+        linewidth=1,
+        gridcolor="rgb(150,150,150)",
+    )
     fig.update_layout(
         height=HEIGHT,
         width=WIDTH,
         # title_text=title,
         title_x=0.5,
-        legend=dict(x=x, y=y),
+        # legend=dict(x=x, y=y),
+        showlegend=False,
         xaxis_title=xlabel,
         yaxis_title=ylabel,
     )
@@ -510,7 +549,6 @@ def box_plot_player(
     return_fig=False,
     exp="qtable_cac",
     names=["QTable", "CAC"],
-    colors=["rgba(60,100,220,0.5)", "rgba(180,40,180,0.5)"],
     title="",
     iters=1,
     x=0.6,
@@ -520,6 +558,7 @@ def box_plot_player(
 ):
     exp_loc = os.path.join(loc, exp)
     exp_reward = []
+    layout = Layout(plot_bgcolor="rgba(0,0,0,0)")
 
     for exp in tqdm(os.listdir(exp_loc)):
         config, agents, environment, _, _ = load_experiment(os.path.join(exp_loc, exp))
@@ -530,21 +569,46 @@ def box_plot_player(
     rewards = exp_reward.reshape([-1, exp_reward.shape[1]])
 
     ylim = [7, 15]
-    fig = go.Figure()
+    fig = go.Figure(layout=layout)
     [
-        fig.add_trace(go.Box(y=rewards[:, i], name=name, fillcolor=colors[i]))
+        fig.add_trace(
+            go.Box(
+                y=rewards[:, i],
+                name=name,
+                fillcolor="rgb(180,180,180)",
+                marker={"color": "rgb(50,50,50)", "size": 1},
+            )
+        )
         for i, name in enumerate(names)
     ]
-    fig.update_yaxes(range=ylim)
+
+    fig.update_yaxes(
+        range=ylim,
+        linecolor="black",
+        showgrid=True,
+        gridwidth=1,
+        linewidth=1,
+        gridcolor="rgb(150,150,150)",
+        zerolinecolor="black",
+    )
+    fig.update_xaxes(
+        linecolor="black",
+        showgrid=True,
+        gridwidth=1,
+        linewidth=1,
+        gridcolor="rgb(150,150,150)",
+    )
     fig.update_layout(
         height=HEIGHT,
         width=WIDTH,
         # title_text=title,
         title_x=0.5,
-        legend=dict(y=y, x=x),
+        # legend=dict(x=x, y=y),
+        showlegend=False,
         xaxis_title=xlabel,
         yaxis_title=ylabel,
     )
+
     if return_fig:
         return fig
     fig.show()
