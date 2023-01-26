@@ -1053,20 +1053,23 @@ class Intention_step(nn.Module):
             return [action, (1 - self.step) * mylast + self.step * nash]
         return [action, (1 - self.step) * mylast + self.step * collude]
 
-    def get_action(self, state):
-        nash = self.get_br_nash(state[0][-1])
-        deltas = self.get_deltas(state, tensors=False)
-        ins = torch.Tensor(deltas)
+    def get_action(
+        self, state
+    ):  # [myq(t-3),hisq(t-3),myq(t-2),hisq(t-2),myq(t-1),hisq(t-1)]
+        [compete, nash, collude] = self.get_br_nash()
+
+        ins = torch.Tensor(state)
         intent = self.intention(ins)
         intent = intent.argmax(dim=-1).numpy()[0]
         ix = self.encode(intent)
         action = numpy.argmax(self.Q[ix])
 
+        mylast = state[0][-2]
         if action == 0:
-            return [action, max(0, nash + self.delta)]
+            return [action, (1 - self.step) * mylast + self.step * compete]
         elif action == 1:
-            return [action, nash]
-        return [action, min(self.env.a, nash - self.delta)]
+            return [action, (1 - self.step) * mylast + self.step * nash]
+        return [action, (1 - self.step) * mylast + self.step * collude]
 
     def encode(self, a):
         return int(a)
@@ -1121,3 +1124,11 @@ class Intention_step(nn.Module):
                 # )
             self.memory.empty()
             self.epsilon = self.eps_end + (self.epsilon - self.eps_end) * self.eps_step
+
+    def save(self, loc):
+        torch.save(self.state_dict(), loc)
+        numpy.save(loc, self.Q)
+
+    def load(self, loc):
+        self.load_state_dict(torch.load(loc))
+        self.Q = numpy.load(loc + ".npy")

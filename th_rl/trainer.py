@@ -299,6 +299,82 @@ def selfmonitoring(agents, environment, **kwargs):
     return rewards_log / max_steps, actions_log / max_steps
 
 
+def intention(agents, environment, **kwargs):
+    epochs = kwargs.get("epochs", 10000)
+    print_freq = kwargs.get("print_freq", 500)
+    lookback = kwargs.get("lookback", 10)
+
+    # Init Logs
+    max_steps = environment.max_steps
+    rewards_log = numpy.zeros((epochs, len(agents)))
+    actions_log = numpy.zeros((epochs, len(agents)))
+    scaled_log = numpy.zeros((epochs, len(agents)))
+    buffer = deque(maxlen=2 * lookback)
+    [buffer.append(i) for i in 2 * lookback * [2.5]]
+
+    def reorder(arr):
+        ar2 = arr.copy()
+        for i in range(0, arr.shape[0], 2):
+            ar2[i] = arr[i + 1]
+            ar2[i + 1] = arr[i]
+        return ar2
+
+    qs = numpy.array(buffer)
+    tstart = time.time()
+    for e in range(epochs):
+
+        # Play trajectory
+        done = False
+        environment.reset()
+        while not done:
+            # choose actions
+            qs2 = reorder(qs)
+            actions = [
+                agents[0].sample_action(qs[None, :]),
+                agents[1].sample_action(qs2[None, :]),
+            ]
+            scaled = [a[1] for a in actions]
+            actions = [a[0] for a in actions]
+            price, reward, done = environment.step(scaled)
+
+            # Update buffer
+            [buffer.append(a) for a in scaled]
+            new_qs = numpy.array(buffer)
+
+            # save transition to the replay memory
+            new_qs2 = reorder(new_qs)
+            agents[0].memory.append(qs, actions[0], reward[0], not done, new_qs)
+            agents[1].memory.append(qs2, actions[1], reward[1], not done, new_qs2)
+            qs = new_qs
+
+            # Log
+            rewards_log[e, :] += numpy.array(reward) / max_steps
+            actions_log[e, :] += numpy.array(actions) / max_steps
+            scaled_log[e, :] += numpy.array(scaled) / max_steps
+
+        # Train
+        [A.train_net() for A in agents]
+
+        # Log progress
+        if not (e + 1) % print_freq:
+            rew = numpy.mean(rewards_log[e - print_freq + 1 : e + 1, :], axis=0)
+            act = numpy.mean(actions_log[e - print_freq + 1 : e + 1, :], axis=0)
+            sca = numpy.mean(scaled_log[e - print_freq + 1 : e + 1, :], axis=0)
+            print(
+                "time:{:2.2f}min \t epsilon:{:0.3f} \t episode:{:3d} \t reward:{} \t actions:{} \t quantities:{}".format(
+                    (time.time() - tstart) / 60,
+                    agents[0].epsilon,
+                    e,
+                    numpy.round(100 * rew) / 100,
+                    numpy.round(100 * act) / 100,
+                    numpy.round(100 * sca) / 100,
+                )
+            )
+            t = time.time()
+
+    return {"rewards": rewards_log, "actions": actions_log, "quantities": scaled_log}
+
+
 def train_one(exp_path, configpath):
     # Handle home location
     if not os.path.exists(exp_path):
@@ -308,7 +384,7 @@ def train_one(exp_path, configpath):
     trainfun = eval(config["training"]["name"])
 
     # Train
-    rewards_log, actions_log = trainfun(agents, environment, **config["training"])
+    logs = trainfun(agents, environment, **config["training"])
 
     # Store result
     for i, a in enumerate(agents):
@@ -317,7 +393,9 @@ def train_one(exp_path, configpath):
     with open(os.path.join(exp_path, "config.json"), "w") as f:
         json.dump(config, f, indent=3)
 
-    rpd = pandas.DataFrame(data=rewards_log, columns=numpy.arange(len(agents)))
-    apd = pandas.DataFrame(data=actions_log, columns=numpy.arange(len(agents)))
-    log = pandas.concat([rpd, apd], axis=1, keys=["rewards", "actions"])
+    pds = [
+        pandas.DataFrame(data=v, columns=numpy.arange(len(agents)))
+        for k, v in logs.items()
+    ]
+    log = pandas.concat(pds, axis=1, keys=logs.keys())
     log.to_csv(os.path.join(exp_path, "log.csv"), index=None)
