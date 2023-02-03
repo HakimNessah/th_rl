@@ -55,6 +55,54 @@ def play_game(agents, environment, iters=1):
     return numpy.stack(actions, axis=2), numpy.stack(rewards, axis=2)
 
 
+def reorder(arr):
+    ar2 = arr.copy()
+    for i in range(0, arr.shape[0], 2):
+        ar2[i] = arr[i + 1]
+        ar2[i + 1] = arr[i]
+    return ar2
+
+
+def play_intention(agents, environment):
+    lookback = agents[0].lookback
+    buffer = deque(maxlen=2 * lookback)
+    [buffer.append(i) for i in 2 * lookback * [2.5]]
+    R, A = [], []
+
+    def reorder(arr):
+        ar2 = arr.copy()
+        for i in range(0, arr.shape[0], 2):
+            ar2[i] = arr[i + 1]
+            ar2[i + 1] = arr[i]
+        return ar2
+
+    qs = numpy.array(buffer)
+
+    # Play trajectory
+    done = False
+    environment.reset()
+    while not done:
+        # choose actions
+        qs2 = reorder(qs)
+        actions = [
+            agents[0].get_action(qs[None, :]),
+            agents[1].get_action(qs2[None, :]),
+        ]
+        scaled = [a[1] for a in actions]
+        actions = [a[0] for a in actions]
+        price, reward, done = environment.step(scaled)
+
+        # Log
+        R.append(reward)
+        A.append(scaled)
+
+        # Update buffer
+        [buffer.append(a) for a in scaled]
+        qs = numpy.array(buffer)
+
+    return numpy.array(A), numpy.stack(R, axis=0)
+
+
 def plot_matrix(
     x,
     y,
