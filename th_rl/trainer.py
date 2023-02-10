@@ -301,14 +301,15 @@ def selfmonitoring(agents, environment, **kwargs):
 
 def intention(agents, environment, **kwargs):
     epochs = kwargs.get("epochs", 10000)
-    print_freq = kwargs.get("print_freq", 500)
     lookback = kwargs.get("lookback", 10)
+    print_freq = int(epochs / 20)
 
     # Init Logs
     max_steps = environment.max_steps
     rewards_log = numpy.zeros((epochs, len(agents)))
     actions_log = numpy.zeros((epochs, len(agents)))
     scaled_log = numpy.zeros((epochs, len(agents)))
+    intentions_log = numpy.zeros((epochs / 100, len(agents), 2))
     buffer = deque(maxlen=2 * lookback)
     [buffer.append(i) for i in 2 * lookback * [2.5]]
 
@@ -318,6 +319,19 @@ def intention(agents, environment, **kwargs):
             ar2[i] = arr[i + 1]
             ar2[i + 1] = arr[i]
         return ar2
+
+    def getIntention(
+        agent,
+        patterns=[
+            [2.5] * 2 * lookback,
+            [10 / 3] * 2 * lookback,
+            [20 / 3 - 2.5] * 2 * lookback,
+        ],
+    ):
+        ins = torch.Tensor(patterns)
+        with torch.no_grad():
+            probs = agent.intention(ins).numpy()
+        return probs
 
     qs = numpy.array(buffer)
     tstart = time.time()
@@ -343,14 +357,20 @@ def intention(agents, environment, **kwargs):
 
             # save transition to the replay memory
             new_qs2 = reorder(new_qs)
-            agents[0].memory.append(qs, actions[0], reward[0], not done, new_qs)
-            agents[1].memory.append(qs2, actions[1], reward[1], not done, new_qs2)
+            agents[0].cac_memory.append(qs, actions[0], reward[0], not done, new_qs)
+            agents[1].cac_memory.append(qs2, actions[1], reward[1], not done, new_qs2)
+            agents[0].q_memory.append(qs, actions[0], reward[0], not done, new_qs)
+            agents[1].q_memory.append(qs2, actions[1], reward[1], not done, new_qs2)
             qs = new_qs
 
             # Log
             rewards_log[e, :] += numpy.array(reward) / max_steps
             actions_log[e, :] += numpy.array(actions) / max_steps
             scaled_log[e, :] += numpy.array(scaled) / max_steps
+
+        # Log intentions
+        intentions_log[int(e / 100), :, 0] = getIntention(agents[0])
+        intentions_log[int(e / 100), :, 1] = getIntention(agents[1])
 
         # Train
         [A.train_net() for A in agents]
@@ -372,7 +392,12 @@ def intention(agents, environment, **kwargs):
             )
             t = time.time()
 
-    return {"rewards": rewards_log, "actions": actions_log, "quantities": scaled_log}
+    return {
+        "rewards": rewards_log,
+        "actions": actions_log,
+        "quantities": scaled_log,
+        "intentions": intentions_log,
+    }
 
 
 def train_one(exp_path, configpath):
@@ -393,9 +418,13 @@ def train_one(exp_path, configpath):
     with open(os.path.join(exp_path, "config.json"), "w") as f:
         json.dump(config, f, indent=3)
 
-    pds = [
-        pandas.DataFrame(data=v, columns=numpy.arange(len(agents)))
-        for k, v in logs.items()
-    ]
-    log = pandas.concat(pds, axis=1, keys=logs.keys())
-    log.to_csv(os.path.join(exp_path, "log.csv"), index=None)
+    for k, v in logs.items():
+        if k == "intensions":
+            numpy.save(os.path.join(exp_path, "intentions.npy"), v)
+        else:
+            pds = [
+                pandas.DataFrame(data=v, columns=numpy.arange(len(agents)))
+                for k, v in logs.items()
+            ]
+            log = pandas.concat(pds, axis=1, keys=logs.keys())
+            log.to_csv(os.path.join(exp_path, "log.csv"), index=None)

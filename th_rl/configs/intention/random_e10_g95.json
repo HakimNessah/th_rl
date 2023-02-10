@@ -1,0 +1,42 @@
+{
+   "agents": [
+      {
+         "name": "Intention_step",
+         "epsilon":1,
+         "alpha":0.1,
+         "cac_capacity":16,
+         "q_capacity":1,
+         "lookback":3,
+         "eps_step":0.99999,
+         "gamma":0.95,
+         "random_intention":true,
+         "eps_end":0.1         
+      },
+      {
+         "name": "Intention_step",
+         "epsilon":1,
+         "alpha":0.1,
+         "cac_capacity":16,
+         "q_capacity":1,
+         "lookback":3,
+         "eps_step":0.99999,
+         "gamma":0.95,
+         "random_intention":true,
+         "eps_end":0.1         
+     }
+   ],
+   "environment": {
+      "name": "NoisyPriceState",
+      "noise_prob": 0,
+      "a": 10,
+      "b": 1,
+      "nplayers": 2,
+      "max_steps": 1
+   },
+   "training": {
+      "name":"intention",
+      "print_freq": 50000,
+      "epochs": 500000,
+      "lookback":3
+   }
+}

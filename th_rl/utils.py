@@ -66,7 +66,7 @@ def reorder(arr):
 def play_intention(agents, environment):
     lookback = agents[0].lookback
     buffer = deque(maxlen=2 * lookback)
-    [buffer.append(i) for i in 2 * lookback * [2.5]]
+    [buffer.append(i) for i in 2 * lookback * [numpy.random.rand() * 5]]
     R, A = [], []
 
     def reorder(arr):

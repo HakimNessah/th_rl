@@ -1000,6 +1000,7 @@ class Intention_step(nn.Module):
     ):
         super(Intention_step, self).__init__()
         self.env = env
+        self.random_intention = kwargs.get("random_intention", False)
         self.lookback = kwargs.get("lookback", 3)
         self.gamma = kwargs.get("gamma", 0.9)
         self.alpha = kwargs.get("alpha", 0.1)
@@ -1009,20 +1010,26 @@ class Intention_step(nn.Module):
         self.step = kwargs.get("step", 0.1)
         self.fc_intention = nn.Linear(2 * self.lookback, 16)
         self.intention_mu = nn.Linear(16, 3)
-        self.Q = -numpy.random.rand(3, 3) + numpy.random.rand(3, 3) * 11.1111111 / (
-            1 - self.gamma
+        self.Q = (
+            20
+            - numpy.random.rand(3, 3)
+            + numpy.random.rand(3, 3) * 11.1111111 / (1 - self.gamma)
         )
-        self.Q[2, 2] = 12.5 / (1 - self.gamma)
-        self.Q[1, 1] = 11.1111111 / (1 - self.gamma)
-        self.Q[0, 0] = 3.81944444 / (1 - self.gamma)
-        self.min_memory = kwargs.get("min_memory", 100)
-        self.optimizer = optim.Adam(self.parameters(), lr=2e-4)
+        self.Q[2, 2] = 20 + 12.5 / (1 - self.gamma)
+        self.Q[1, 1] = 20 + 11.1111111 / (1 - self.gamma)
+        self.Q[0, 0] = 20 + 3.81944444 / (1 - self.gamma)
+        self.optimizer = optim.Adam(self.parameters(), lr=1e-3)
         self.loss_fn = torch.nn.CrossEntropyLoss()
         self.experience = namedtuple(
             "Experience", field_names=["state", "action", "reward", "done", "new_state"]
         )
-        self.memory = eval(kwargs.get("buffer", "ReplayBuffer"))(
-            kwargs.get("capacity", 100), self.experience
+        self.cac_capacity = kwargs.get("cac_capacity", 100)
+        self.cac_memory = eval(kwargs.get("buffer", "ReplayBuffer"))(
+            self.cac_capacity, self.experience
+        )
+        self.q_capacity = kwargs.get("q_capacity", 1)
+        self.q_memory = eval(kwargs.get("buffer", "ReplayBuffer"))(
+            self.q_capacity, self.experience
         )
 
     def get_br_nash(self):
@@ -1040,9 +1047,12 @@ class Intention_step(nn.Module):
         if random.uniform(0, 1) < self.epsilon:
             action = random.randint(0, 2)
         else:
-            ins = torch.Tensor(state)
-            intent = self.intention(ins)
-            intent = intent.argmax(dim=-1).numpy()[0]
+            if self.random_intention:
+                intent = random.randint(0, 2)
+            else:
+                ins = torch.Tensor(state)
+                intent = self.intention(ins)
+                intent = intent.argmax(dim=-1).numpy()[0]
             ix = self.encode(intent)
             action = numpy.argmax(self.Q[ix])
 
@@ -1057,10 +1067,12 @@ class Intention_step(nn.Module):
         self, state
     ):  # [myq(t-3),hisq(t-3),myq(t-2),hisq(t-2),myq(t-1),hisq(t-1)]
         [compete, nash, collude] = self.get_br_nash()
-
-        ins = torch.Tensor(state)
-        intent = self.intention(ins)
-        intent = intent.argmax(dim=-1).numpy()[0]
+        if self.random_intention:
+            intent = random.randint(0, 2)
+        else:
+            ins = torch.Tensor(state)
+            intent = self.intention(ins)
+            intent = intent.argmax(dim=-1).numpy()[0]
         ix = self.encode(intent)
         action = numpy.argmax(self.Q[ix])
 
@@ -1074,56 +1086,72 @@ class Intention_step(nn.Module):
     def encode(self, a):
         return int(a)
 
-    def train_net(self):
-        if len(self.memory) >= self.min_memory:
-            qs, acts, rwrd, not_done, next_qs = self.memory.replay()
+    def train_cac(self):
+        if self.epsilon > 0.1:
+            if len(self.cac_memory) >= self.cac_capacity:
+                qs, acts, rwrd, not_done, next_qs = self.cac_memory.replay()
 
-            qs = torch.Tensor(numpy.stack(qs, axis=0))
-            his_intention = self.intention(qs)  # [p0,p1,p2]
+                qs = torch.Tensor(numpy.stack(qs, axis=0))
+                his_intention = self.intention(qs)  # [p0,p1,p2]
 
-            next_qs = torch.Tensor(numpy.stack(next_qs, axis=0))
-            new_intention = self.intention(next_qs)
+                next_qs = torch.Tensor(numpy.stack(next_qs, axis=0))
 
-            # Intention loss
-            last = qs[:, -1]
-            nextlast = next_qs[:, -1]
-            mat = (
-                torch.stack(
-                    [
-                        (1 - self.step) * last + self.step * anchor
-                        for anchor in self.get_br_nash()
-                    ],
-                    axis=1,
+                # Intention loss
+                last = qs[:, -1]
+                nextlast = next_qs[:, -1]
+                mat = (
+                    torch.stack(
+                        [
+                            (1 - self.step) * last + self.step * anchor
+                            for anchor in self.get_br_nash()
+                        ],
+                        axis=1,
+                    )
+                    - nextlast[:, None]
                 )
-                - nextlast[:, None]
-            )
-            mat = torch.abs(mat)
+                mat = torch.abs(mat)
+                y = torch.argmin(mat, axis=1)
+                loss = self.loss_fn(his_intention, y)
 
-            y = torch.argmin(mat, axis=1)
-            loss = self.loss_fn(his_intention, y)
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+                self.cac_memory.empty()
 
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
+    def train_q(self):
+        if len(self.q_memory) >= self.q_capacity:
+            qs, acts, rwrd, not_done, next_qs = self.q_memory.replay()
+
+            if not self.random_intention:
+                qs = torch.Tensor(numpy.stack(qs, axis=0))
+                his_intention = self.intention(qs).detach()  # [p0,p1,p2]
+                next_qs = torch.Tensor(numpy.stack(next_qs, axis=0))
+                new_intention = self.intention(next_qs).detach()
+            else:
+                his_intention = torch.rand((len(qs), 3))
+                his_intention /= his_intention.sum(axis=1, keepdim=True)
+                new_intention = torch.rand((len(qs), 3))
+                new_intention /= new_intention.sum(axis=1, keepdim=True)
 
             # QTable update
             for a, prob, r, newprob in zip(
                 acts,
-                his_intention.detach().numpy(),
+                his_intention.numpy(),
                 rwrd,
-                new_intention.detach().numpy(),
+                new_intention.numpy(),
             ):
                 ix = self.encode(prob.argmax())
                 nextQ = sum([newprob[i] * self.Q[i] for i in range(3)])
                 self.Q[ix, a] = (1 - self.alpha) * self.Q[ix, a] + self.alpha * (
                     r + self.gamma * max(nextQ)
                 )
-                # nextQ = sum([newprob[i] * max(self.Q[i]) for i in range(3)])
-                # self.Q[ix, a] = self.alpha * self.Q[ix, a] + (1 - self.alpha) * (
-                #    r + self.gamma * nextQ
-                # )
-            self.memory.empty()
             self.epsilon = self.eps_end + (self.epsilon - self.eps_end) * self.eps_step
+            self.q_memory.empty()
+
+    def train_net(self):
+        self.train_q()
+        if not self.random_intention:
+            self.train_cac()
 
     def save(self, loc):
         torch.save(self.state_dict(), loc)
