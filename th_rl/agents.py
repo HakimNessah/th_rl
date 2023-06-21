@@ -7,89 +7,76 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical, Normal
 from th_rl.buffers import *
+import numbers
 
 
 class QTable:
     def __init__(
         self,
-        states=16,
-        actions=4,
-        action_range=[0, 1],
-        gamma=0.99,
+        states=20,
+        actions=20,
+        action_range=[2, 4],
+        gamma=0.9,
         buffer="ReplayBuffer",
-        capacity=500,
-        max_state=10,
+        capacity=1,
         alpha=0.1,
         eps_end=2e-2,
         epsilon=0.5,
         eps_step=5e-4,
-        min_memory=100,
+        min_memory=1,
         **kwargs
     ):
-        self.table = 12.5 / (1 - gamma) + numpy.random.randn(states + 1, actions)
+        self.table = 100 / (1 - gamma) + numpy.random.randn(states, actions)
         self.gamma = gamma
         self.alpha = alpha
-        self.action_space = numpy.arange(0, actions)
-        self.action_range = action_range
-        self.actions = actions
+        self.a2q = numpy.linspace(action_range[0], action_range[1], actions)
+        self.q2s = numpy.linspace(action_range[0], action_range[1], states)
+        self.nactions = actions
         self.epsilon = epsilon
         self.eps_step = eps_step
         self.eps_end = eps_end
         self.states = states
-        self.max_state = max_state
         self.min_memory = min_memory
         self.experience = namedtuple(
-            "Experience", field_names=["state", "action", "reward", "done", "new_state"]
+            "Experience", field_names=["state", "action", "reward", "new_state"]
         )
         self.memory = eval(buffer)(capacity, self.experience)
         self.counter = 0 * self.table
 
     def encode(self, state):
-        astate = numpy.round(state / self.max_state * self.states).astype("int64")
-        return astate
+        # Assuming all agents have the same action_range!
+        if isinstance(state, numbers.Number) or (len(state.shape) == 1):
+            ix = numpy.argmin(numpy.abs(state - self.q2s))
+        else:
+            ix = numpy.argmin(numpy.abs(state - self.q2s), axis=1)
+        return ix
 
-    def scale(self, actions):
-        return (
-            actions
-            / (self.actions - 1.0)
-            * (self.action_range[1] - self.action_range[0])
-            + self.action_range[0]
-        )
-
-    def train_net(self):
+    def train(self):
         if len(self.memory) >= self.min_memory:
-            price, acts, rwrd, not_done, next_state = self.memory.replay()
-            state = self.encode(numpy.array(price))[:, 0]
-            [actions, not_done, rewards] = [
-                numpy.reshape(x, [-1]) for x in [acts, not_done, rwrd]
-            ]
-            next_state = self.encode(numpy.array(next_state))[:, 0]
-            old_value = self.table[state, actions]
-            for i, (ns, ov, re, st, ac) in enumerate(
-                zip(next_state, old_value, rewards, state, actions)
-            ):
-                next_max = numpy.max(self.table[ns])
-                new_value = (1 - self.alpha) * ov + self.alpha * (
-                    re + self.gamma * next_max
-                )
-                self.table[st, ac] = new_value
+            states, acts, rewards, next_states = self.memory.replay()
+            states_ix = self.encode(numpy.array(states)[:, None])
+            next_states_ix = self.encode(numpy.array(next_states)[:, None])
+            actions = self.encode(numpy.array(acts)[:, None])
+            for ns, re, st, ac in zip(next_states_ix, rewards, states_ix, actions):
+                newval = re + self.gamma * numpy.max(self.table[ns])
+                self.table[st, ac] = (1 - self.alpha) * self.table[
+                    st, ac
+                ] + self.alpha * newval
                 self.counter[st, ac] += 1
             self.memory.empty()
         self.epsilon = self.eps_end + (self.epsilon - self.eps_end) * self.eps_step
 
-    def sample_action(self, state):
-        if random.uniform(0, 1) < self.epsilon:
-            action = random.choice(self.action_space)
-        else:
-            if isinstance(state, torch.Tensor):
-                st = state.numpy()
-            else:
-                st = state
-            action = numpy.argmax(self.table[self.encode(st)])
-        return action
+    def sample(self, obs):
+        if numpy.random.rand() < self.epsilon:
+            return numpy.random.choice(self.a2q)
+        ix = self.encode(obs)
+        action = numpy.argmax(self.table[ix])
+        return self.a2q[action]
 
-    def get_action(self, state):
-        return numpy.argmax(self.table[self.encode(state)])
+    def act(self, obs):
+        ix = self.encode(obs)
+        action = numpy.argmax(self.table[ix])
+        return self.a2q[action]
 
     def reset(self, eps_end):
         self.table = 100 / (1 - self.gamma) + numpy.random.randn(
@@ -440,3 +427,61 @@ class CAC(nn.Module):
 
     def load(self, loc):
         self.load_state_dict(torch.load(loc))
+
+
+class Exp3:
+    def __init__(
+        self,
+        entropy=0.1,
+        actions=4,
+        action_range=[0, 1],
+        gamma=0.99,
+        buffer="ReplayBuffer",
+        capacity=500,
+        eps_end=2e-2,
+        epsilon=0.5,
+        eps_step=5e-4,
+        min_memory=100,
+    ) -> None:
+        self.nactions = actions
+        self.entropy = entropy
+        self.i2a = numpy.linspace(action_range[0], action_range[1], actions)
+        self.a2i = {self.i2a[i]: i for i in range(actions)}
+        self.weights = numpy.ones((actions, 1))
+
+    @property
+    def probs(self):
+        sw = self.weights.sum()
+        return self.entropy / self.actions + (1 - self.entropy) * self.weights / sw
+
+    def sample_action(self, dum):
+        # Return quantity
+        quantity = numpy.random.choice(self.i2a, p=self.probs)
+        return quantity
+
+    def get_action(self, dum):
+        return self.sample_action(dum)
+
+    def train_net(self):
+        if len(self.memory) >= self.min_memory:
+            price, quants, rwrds, not_done, next_state = self.memory.replay()
+            for q, r in zip(quants, rwrds):
+                ix = self.a2i(q)
+                self.weights[ix] *= numpy.exp(
+                    self.entropy / self.nactions * r / self.probs[ix]
+                )
+            self.memory.empty()
+
+    def reset(self):
+        self.weights = numpy.ones((self.nactions, 1))
+
+    def save(self, loc):
+        numpy.save(loc, self.weights)
+
+    def load(self, loc):
+        self.weights = numpy.load(loc + ".npy")
+
+
+class UCB:
+    # https://jamesrledoux.com/algorithms/bandit-algorithms-epsilon-ucb-exp-python/
+    pass

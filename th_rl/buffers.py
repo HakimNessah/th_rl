@@ -18,23 +18,17 @@ class ReplayBuffer:
     def append(self, *args):
         self.buffer.append(self.experience(*args))
 
-    def sample(self, batch_size, cast=None):
+    def sample(self, batch_size):
         indices = numpy.random.choice(len(self.buffer), batch_size, replace=False)
         output = zip(*[self.buffer[idx] for idx in indices])
-        if cast:
-            output = (torch.tensor(t, dtype=dt) for t, dt in zip(output, cast))
         return output
 
-    def replay(self, cast=None, replay_size=0):
+    def replay(self, replay_size=0):
         if replay_size == 0:
             indices = numpy.arange(0, len(self.buffer))
         else:
             indices = numpy.arange(len(self.buffer) - replay_size, len(self.buffer))
         output = zip(*[self.buffer[idx] for idx in indices])
-        if cast:
-            output = (
-                torch.tensor(numpy.array(t), dtype=dt) for t, dt in zip(output, cast)
-            )
         return output
 
     def empty(self):
