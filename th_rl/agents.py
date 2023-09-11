@@ -461,8 +461,7 @@ class CAC(nn.Module):
             delta = td_target - v
             dist = Normal(mu, std)
 
-
-            _actions = 5e-5 + (1 - 1e-4) * actions
+            _actions = 1e-6 + (1 - 1e-6) * actions
             logits = torch.log(_actions / (1 - _actions))
 
             actor_loss = -dist.log_prob(logits) * delta.detach()

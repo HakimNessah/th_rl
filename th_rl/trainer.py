@@ -107,9 +107,12 @@ def train_one(exp_path, configpath):
 
     rpd = pandas.DataFrame(data=rlog, columns=numpy.arange(len(agents)))
     apd = pandas.DataFrame(data=alog, columns=numpy.arange(len(agents)))
+    rpd = rpd.rolling(window=100).mean()[::100]
+    apd = apd.rolling(window=100).mean()[::100]
+
     log = pandas.concat([rpd, apd], axis=1, keys=["rewards", "actions"])
     log.to_csv(os.path.join(exp_path, "log.csv"), index=None)
 
     # Plot learning curve
     if plot:
-        plot_learning_curve(rlog, alog,[type(Q).__name__ for Q in agents], smooth=1000)
+        plot_learning_curve(rlog, alog,[type(Q).__name__ for Q in agents], smooth=10)
