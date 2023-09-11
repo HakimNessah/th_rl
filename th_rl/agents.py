@@ -315,7 +315,7 @@ class CAC(nn.Module):
         self.fc_mu = nn.Linear(128, 1)
         self.fc_std = nn.Linear(128, 1)
         self.fc_v = nn.Linear(128, 1)
-        self.optimizer = optim.AdamW(self.parameters(), lr=1e-4)
+        self.optimizer = optim.Adam(self.parameters(), lr=2e-4)
         self.experience = namedtuple(
             "Experience", field_names=["state", "action", "reward", "new_state"]
         )
