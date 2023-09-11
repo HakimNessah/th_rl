@@ -4,18 +4,18 @@
          "name": "CAC",
          "gamma": 0.98,
          "action_range": [2, 4],
-         "state_range": [2, 6],
-         "capacity":100,
-         "min_memory":100,
+         "state_range": [2,6],
+         "capacity":1000,
+         "min_memory":1000,
          "entropy":0    
       },
       {
          "name": "CAC",
          "gamma": 0.98,
-         "action_range": [2, 4],
-         "state_range": [2, 6],
-         "capacity":100,
-         "min_memory":100,
+         "action_range": [2,4],
+         "state_range": [2,6],
+         "capacity":1000,
+         "min_memory":1000,
          "entropy":0
       }
    ],

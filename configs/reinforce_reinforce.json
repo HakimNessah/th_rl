@@ -2,7 +2,7 @@
    "agents": [
       {
          "name": "Reinforce",
-         "gamma": 0.95,
+         "gamma": 0.98,
          "actions": 20,
          "states": 1,
          "action_range": [2, 4],
@@ -11,7 +11,7 @@
       },
       {
          "name": "Reinforce",
-         "gamma": 0.95,
+         "gamma": 0.98,
          "actions": 20,
          "states": 1,
          "action_range": [2, 4],
@@ -27,7 +27,7 @@
    },
    "training": {
       "epochs": 1000000,
-      "print_freq": 0,
+      "print_freq": 10000,
       "plot":false
    }
 }

@@ -223,7 +223,7 @@ class Reinforce(nn.Module):
         self.actions = actions
         self.fc1 = nn.Linear(states, 128)
         self.fc_pi = nn.Linear(128, actions)
-        self.optimizer = optim.AdamW(self.parameters(), lr=2e-4)
+        self.optimizer = optim.AdamW(self.parameters(), lr=1e-4)
         self.experience = namedtuple(
             "Experience", field_names=["reward", "logprob"]
         )
@@ -252,8 +252,8 @@ class Reinforce(nn.Module):
     def sample(self, state):
         probs = self.pi(self.encode_state(state))
         highest_prob_action = numpy.random.choice(self.actions, p=numpy.squeeze(probs.detach().numpy()))
-        log_prob = torch.log(probs.squeeze(0)[highest_prob_action])
-        return self.a2q[highest_prob_action], log_prob
+        prob = probs.squeeze(0)[highest_prob_action]
+        return self.a2q[highest_prob_action], prob
 
     def act(self, state):
         pi = self.pi(self.encode_state(state))
@@ -262,7 +262,8 @@ class Reinforce(nn.Module):
 
     def train(self):
         if len(self.memory) >= self.min_memory:
-            rewards, logprobs = self.memory.replay()
+            rewards, probs = self.memory.replay()
+            logprobs = torch.log(torch.stack(probs))
 
             # Discount&Normalize
             R = numpy.array(rewards)
@@ -282,100 +283,6 @@ class Reinforce(nn.Module):
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.parameters(), 1.0)
             self.optimizer.step()                
-            self.memory.empty()
-
-    def save(self, loc):
-        torch.save(self.state_dict(), loc)
-
-    def load(self, loc):
-        self.load_state_dict(torch.load(loc))
-
-class ActorCritic(nn.Module):
-    def __init__(
-        self,
-        states=4,
-        actions=2,
-        action_range=[0, 1],
-        gamma=0.98,
-        buffer="ReplayBuffer",
-        capacity=50000,
-        min_memory=1000,
-        name=0,
-        **kwargs
-    ):
-        super(ActorCritic, self).__init__()
-        self.name=name
-        self.data = []
-        self.gamma = gamma
-        self.action_range = action_range
-        self.actions = actions
-        self.fc1 = nn.Linear(states, 256)
-        self.fc_pi = nn.Linear(256, actions)
-        self.fc_v = nn.Linear(256, 1)
-        self.optimizer = optim.AdamW(self.parameters(), lr=1e-3)
-        self.experience = namedtuple(
-            "Experience", field_names=["state", "action", "reward", "new_state"]
-        )
-        self.memory = eval(buffer)(capacity, self.experience)
-        self.min_memory = min_memory
-        self.a2q = numpy.linspace(action_range[0], action_range[1], actions)
-
-
-    def encode_state(self, obs):        
-        x = numpy.atleast_2d(obs).astype('float32')
-        return torch.Tensor(x)
-
-    def encode_action(self, action):
-        # Action = Quantity
-        if isinstance(action, numbers.Number) or (len(action.shape) == 1):
-            ix = numpy.argmin(numpy.abs(action - self.a2q))
-        else:
-            ix = numpy.argmin(numpy.abs(action - self.a2q), axis=1)
-        return ix      
-    
-    def pi(self, x):  # Pi=policy-> Actor
-        x = torch.tanh(self.fc1(x))
-        x = self.fc_pi(x)
-        prob = F.softmax(x, dim=-1)
-        return prob
-
-    def v(self, x):  # v = Value -> Critic
-        y = torch.relu(self.fc1(x))
-        v = self.fc_v(y)
-        return v
-
-    def sample(self, state):
-        probs = self.pi(self.encode_state(state))
-        highest_prob_action = numpy.random.choice(self.actions, p=numpy.squeeze(probs.detach().numpy()))
-        log_prob = torch.log(probs.squeeze(0)[highest_prob_action])
-        return self.a2q[highest_prob_action], log_prob
-
-    def act(self, state):
-        pi = self.pi(self.encode_state(state))
-        m = torch.argmax(pi)
-        return self.a2q[m.item()]
-
-    def train(self):
-        if len(self.memory) >= self.min_memory:
-            S, lp, rewards, next_S = self.memory.replay()
-            states = self.encode_state(numpy.array(S)[:, None])
-            s_prime = self.encode_state(numpy.array(next_S)[:, None])
-            rewards = torch.Tensor(numpy.array(rewards)[:,None])
-            logprobs = torch.stack(lp)
-
-            v = self.v(states)
-            v_prime = self.v(s_prime)
-
-            td_target = rewards + self.gamma * v_prime
-            delta = td_target - v
-            if self.name==0 and numpy.random.rand()<0.01:
-                print(rewards.std())
-
-            loss = torch.mean(-logprobs * delta.detach() + F.smooth_l1_loss(v, td_target.detach()))
-            self.optimizer.zero_grad()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.parameters(), 1.0)
-            self.optimizer.step()
             self.memory.empty()
 
     def save(self, loc):
@@ -408,7 +315,7 @@ class CAC(nn.Module):
         self.fc_mu = nn.Linear(128, 1)
         self.fc_std = nn.Linear(128, 1)
         self.fc_v = nn.Linear(128, 1)
-        self.optimizer = optim.AdamW(self.parameters(), lr=2e-4)
+        self.optimizer = optim.AdamW(self.parameters(), lr=1e-4)
         self.experience = namedtuple(
             "Experience", field_names=["state", "action", "reward", "new_state"]
         )
@@ -441,30 +348,26 @@ class CAC(nn.Module):
         dist = Normal(mu, std)
         sample = dist.sample()
         action = torch.sigmoid(sample).item()    
-        return self.action_range[0] + (self.action_range[1]-self.action_range[0])*action, []
+        return self.action_range[0] + (self.action_range[1]-self.action_range[0])*action, sample
 
     def act(self, state):
         return self.sample(state)
 
     def train(self):
         if len(self.memory) >= self.min_memory:
-            S, acts, rewards, next_S = self.memory.replay()
+            S, samples, rewards, next_S = self.memory.replay()
             states = self.encode_state(numpy.array(S)[:, None])
             s_prime = self.encode_state(numpy.array(next_S)[:, None])
-            actions = torch.Tensor(self.encode_action(numpy.array(acts)[:,None]))
             rewards = torch.Tensor(numpy.array(rewards)[:,None])
-
             mu, std = self.pi(states)
             v = self.v(states)
+            dist = Normal(mu, std)
+            logprobs = dist.log_prob(torch.stack(samples)).squeeze()
 
             td_target = rewards + self.gamma * self.v(s_prime) 
             delta = td_target - v
-            dist = Normal(mu, std)
 
-            _actions = 1e-6 + (1 - 1e-6) * actions
-            logits = torch.log(_actions / (1 - _actions))
-
-            actor_loss = -dist.log_prob(logits) * delta.detach()
+            actor_loss = -logprobs * delta.squeeze().detach()
             critic_loss = F.smooth_l1_loss(v, td_target.detach())
             entropy_loss = -dist.entropy()*self.entropy
 
@@ -482,197 +385,3 @@ class CAC(nn.Module):
 
     def load(self, loc):
         self.load_state_dict(torch.load(loc))
-
-class PPO(nn.Module):
-    def __init__(
-        self,
-        states=1,
-        actions=1,
-        action_range=[0, 1],
-        state_range=[0,10],
-        gamma=0.98,
-        buffer="ReplayBuffer",
-        capacity=50000,
-        min_memory=1000,
-        batch = 10,
-        lmbda = 0.9,
-        eps_clip = 0.2,
-        **kwargs
-    ):
-        super(PPO, self).__init__()
-        self.data = []
-        self.lmbda = lmbda
-        self.eps_clip = eps_clip       
-        self.gamma = gamma
-        self.action_range = action_range
-        self.state_range = state_range
-        self.actions = actions
-        self.fc1 = nn.Linear(states, 128)
-        self.fc_mu = nn.Linear(128, 1)
-        self.fc_std = nn.Linear(128, 1)
-        self.fc_v = nn.Linear(128, 1)
-        self.optimizer = optim.AdamW(self.parameters(), lr=2e-4)
-        self.experience = namedtuple(
-            "Experience", field_names=["state", "action", "reward", "new_state", "logprob"]
-        )
-        self.memory = eval(buffer)(capacity, self.experience)
-        self.min_memory = min_memory
-        self.step = 0
-        self.batch = batch
-
-    def encode_state(self, obs):        
-        x = numpy.atleast_2d(obs).astype('float32')
-        x -= self.state_range[0]
-        x *= 2/(self.state_range[1]-self.state_range[0])
-        return torch.Tensor(x-1)
-    
-    def encode_action(self, actions):
-        return (actions - self.action_range[0])/(self.action_range[1]-self.action_range[0])
-   
-    def pi(self, x):  # Pi=policy-> Actor
-        x = torch.relu(self.fc1(x))
-        mu = 4.0 * torch.tanh(self.fc_mu(x))
-        std = F.softplus(self.fc_std(x))
-        return mu, std
-
-    def v(self, x):  # v = Value -> Critic
-        y = torch.relu(self.fc1(x))
-        v = self.fc_v(y)
-        return v
-    
-    def sample(self, state):
-        mu, std = self.pi(self.encode_state(state))
-        dist = Normal(mu, std)
-        sample = dist.sample()
-        action = torch.sigmoid(sample)
-        log_prob = dist.log_prob(action).detach()
-        action =  self.action_range[0] + (self.action_range[1]-self.action_range[0])*action.item()    
-        return action, log_prob
-
-    def act(self, state):
-        a,p = self.sample(state)
-        return a
-
-    def calc_advantage(self):
-        S, acts, rewards, next_S, oprobs = self.memory.sample(self.batch)
-        #S, acts, rewards, next_S, oprobs = self.memory.replay()
-        s = self.encode_state(numpy.array(S)[:, None])
-        s_prime = self.encode_state(numpy.array(next_S)[:, None])
-        a = torch.Tensor(self.encode_action(numpy.array(acts)[:,None]))
-        r = torch.Tensor(numpy.array(rewards)[:,None])
-        old_log_prob = torch.concat(oprobs,axis=0)
-        with torch.no_grad():
-            td_target = r + self.gamma * self.v(s_prime)
-            delta = td_target - self.v(s)
-            delta = delta.numpy()
-
-        advantage_lst = []
-        advantage = 0.0
-        for delta_t in delta[::-1]:
-            advantage = self.gamma * self.lmbda * advantage + delta_t[0]
-            advantage_lst.append([advantage])
-        advantage_lst.reverse()
-        advantage = torch.tensor(advantage_lst, dtype=torch.float)
-        return (s, a, r, s_prime, old_log_prob, td_target, advantage)
-
-        
-    def train(self):
-        if self.step>0 and self.step%self.batch==0:
-        #if len(self.memory) >= self.min_memory:        
-            s, a, r, s_prime, old_log_prob, td_target, advantage = self.calc_advantage()
-
-            mu, std = self.pi(s)
-            dist = Normal(mu, std)
-            log_prob = dist.log_prob(a)
-            ratio = torch.exp(log_prob - old_log_prob)  # a/b == exp(log(a)-log(b))
-
-            surr1 = ratio * advantage
-            surr2 = torch.clamp(ratio, 1-self.eps_clip, 1+self.eps_clip) * advantage
-            loss = -torch.min(surr1, surr2) + F.smooth_l1_loss(self.v(s) , td_target)
-
-            self.optimizer.zero_grad()
-            loss.mean().backward()
-            nn.utils.clip_grad_norm_(self.parameters(), 1.0)
-            self.optimizer.step()
-            #self.memory.empty()
-
-        self.step +=1
-
-    def save(self, loc):
-        torch.save(self.state_dict(), loc)
-
-    def load(self, loc):
-        self.load_state_dict(torch.load(loc))
-
-class Exp3:
-    def __init__(
-        self,
-        states=20,
-        actions=20,
-        action_range=[2, 4],
-        gamma=0.9,
-        buffer="ReplayBuffer",
-        capacity=1,
-        eta=0.1,
-        min_memory=1,
-        state_range=[0,10],
-        alpha=0.1,
-        **kwargs
-    ):
-        self.gamma = gamma
-        self.eta = eta
-        self.a2q = numpy.linspace(action_range[0], action_range[1], actions)
-        self.p2s = numpy.linspace(state_range[0], state_range[1], states)
-        self.nactions = actions
-        self.states = states
-        self.min_memory = min_memory
-        self.experience = namedtuple("Experience", field_names=["action", "reward"])
-        self.memory = eval(buffer)(capacity, self.experience)
-        noise = numpy.random.randn(actions)
-        noise -= noise.mean()
-        self.weights = numpy.ones((actions,))+noise/100
-        self.alpha = alpha
-
-    @property
-    def probabilities(self):
-        W = self.weights
-        wsum = sum(W)
-        probs = (1-self.eta)*W/wsum + self.eta/self.nactions     
-        return probs
-
-    
-    def encode_action(self, action):
-        # Action = Quantity
-        if isinstance(action, numbers.Number) or (len(action.shape) == 1):
-            ix = numpy.argmin(numpy.abs(action - self.a2q))
-        else:
-            ix = numpy.argmin(numpy.abs(action - self.a2q), axis=1)
-        return ix    
-
-
-    def sample(self, data):
-        return numpy.random.choice(self.a2q,p=self.probabilities), []
-    
-    def act(self):
-        return self.sample()
-
-    def train(self):
-        if len(self.memory) >= self.min_memory:
-            acts, rewards = self.memory.replay()
-            actions = self.encode_action(numpy.array(acts)[:, None])
-            rewards = numpy.array(rewards)
-            rhat = rewards-12.5 #numpy.clip(rewards/25,0,1)
-            probs = self.probabilities    
-            W = numpy.zeros(self.weights.shape)            
-            for i, (re,  ac) in enumerate(zip(rhat, actions)):
-                W[ac] += re*self.gamma**(i+1)
-            Y = self.eta*W/probs/self.nactions
-            self.weights *= numpy.exp(Y)            
-            self.memory.empty()
-
-
-    def save(self, loc):
-        numpy.save(loc, self.weights)
-
-    def load(self, loc):
-        self.weights = numpy.load(loc + ".npy")

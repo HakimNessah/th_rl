@@ -15,10 +15,10 @@ def main(**params):
         if '.json' in confname:
             cpath = os.path.join(home, confname.replace('.json',''))
             if confname.replace('.json','') not in os.listdir(home):
-                print('Running {}'.format(confname))
                 if not os.path.exists(cpath):
                     os.mkdir(cpath)
                 for i in range(params['runs']):
+                    print(f'Running {confname}; \t Run #{i}')
                     exp_path = os.path.join(cpath, str(i))
                     train_one(exp_path, os.path.join(params['dir'],confname))
             else:
