@@ -223,7 +223,7 @@ class Reinforce(nn.Module):
         self.actions = actions
         self.fc1 = nn.Linear(states, 128)
         self.fc_pi = nn.Linear(128, actions)
-        self.optimizer = optim.AdamW(self.parameters(), lr=1e-4)
+        self.optimizer = optim.AdamW(self.parameters(), lr=2e-4)
         self.experience = namedtuple(
             "Experience", field_names=["reward", "logprob"]
         )
@@ -408,7 +408,7 @@ class CAC(nn.Module):
         self.fc_mu = nn.Linear(128, 1)
         self.fc_std = nn.Linear(128, 1)
         self.fc_v = nn.Linear(128, 1)
-        self.optimizer = optim.AdamW(self.parameters(), lr=1e-4)
+        self.optimizer = optim.AdamW(self.parameters(), lr=2e-4)
         self.experience = namedtuple(
             "Experience", field_names=["state", "action", "reward", "new_state"]
         )
