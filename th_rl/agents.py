@@ -391,3 +391,77 @@ class CAC(nn.Module):
 
     def load(self, loc):
         self.load_state_dict(torch.load(loc))
+
+
+class Exp3:
+    def __init__(
+        self,
+        states=20,
+        actions=20,
+        action_range=[2, 4],
+        gamma=0.9,
+        buffer="ReplayBuffer",
+        capacity=1,
+        eta=0.1,
+        min_memory=1,
+        state_range=[0,10],
+        alpha=0.1,
+        **kwargs
+    ):
+        self.gamma = gamma
+        self.eta = eta
+        self.a2q = numpy.linspace(action_range[0], action_range[1], actions)
+        self.p2s = numpy.linspace(state_range[0], state_range[1], states)
+        self.nactions = actions
+        self.states = states
+        self.min_memory = min_memory
+        self.experience = namedtuple("Experience", field_names=["action", "reward"])
+        self.memory = eval(buffer)(capacity, self.experience)
+        noise = numpy.random.randn(actions)
+        noise -= noise.mean()
+        self.weights = numpy.ones((actions,))+noise/100
+        self.alpha = alpha
+
+    @property
+    def probabilities(self):
+        W = self.weights
+        wsum = sum(W)
+        probs = (1-self.eta)*W/wsum + self.eta/self.nactions     
+        return probs
+
+    
+    def encode_action(self, action):
+        # Action = Quantity
+        if isinstance(action, numbers.Number) or (len(action.shape) == 1):
+            ix = numpy.argmin(numpy.abs(action - self.a2q))
+        else:
+            ix = numpy.argmin(numpy.abs(action - self.a2q), axis=1)
+        return ix    
+
+
+    def sample(self, data):
+        return numpy.random.choice(self.a2q,p=self.probabilities), []
+    
+    def act(self):
+        return self.sample()
+
+    def train(self):
+        if len(self.memory) >= self.min_memory:
+            acts, rewards = self.memory.replay()
+            actions = self.encode_action(numpy.array(acts)[:, None])
+            rewards = numpy.array(rewards)
+            rhat = rewards-12.5 #numpy.clip(rewards/25,0,1)
+            probs = self.probabilities    
+            W = numpy.zeros(self.weights.shape)            
+            for i, (re,  ac) in enumerate(zip(rhat, actions)):
+                W[ac] += re*self.gamma**(i+1)
+            Y = self.eta*W/probs/self.nactions
+            self.weights *= numpy.exp(Y)            
+            self.memory.empty()
+
+
+    def save(self, loc):
+        numpy.save(loc, self.weights)
+
+    def load(self, loc):
+        self.weights = numpy.load(loc + ".npy")
