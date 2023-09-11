@@ -1,5 +1,6 @@
 import click
 import os
+import matplotlib.pyplot as plt
 
 from th_rl.trainer import train_one
 
@@ -14,14 +15,15 @@ def main(**params):
         if '.json' in confname:
             cpath = os.path.join(home, confname.replace('.json',''))
             if confname.replace('.json','') not in os.listdir(home):
+                print('Running {}'.format(confname))
                 if not os.path.exists(cpath):
                     os.mkdir(cpath)
                 for i in range(params['runs']):
                     exp_path = os.path.join(cpath, str(i))
                     train_one(exp_path, os.path.join(params['dir'],confname))
-                else:
-                    print('Skipping {}'.format(confname))
+            else:
+                print('Skipping {}'.format(confname))
 
 if __name__=='__main__':
     main()
-    
+    plt.show()

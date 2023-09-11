@@ -279,7 +279,7 @@ def plot_learning_curve_area(
     fig.update_layout(
         height=HEIGHT,
         width=WIDTH,
-        # title_text=title,
+        title_text=title,
         title_x=0.5,
         legend=dict(y=y, x=x),
         xaxis_title=xlabel,

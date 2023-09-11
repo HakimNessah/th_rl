@@ -2,7 +2,7 @@ import numpy
 
 
 class Cournot:
-    def __init__(self, a=10, b=1):
+    def __init__(self, a=10, b=1, **kwargs):
         self.a = 10
         self.b = 1
 
