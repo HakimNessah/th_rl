@@ -297,7 +297,6 @@ class CAC(nn.Module):
         states=1,
         actions=1,
         action_range=[0, 1],
-        state_range=[0,10],
         gamma=0.98,
         buffer="ReplayBuffer",
         capacity=50000,
@@ -309,13 +308,12 @@ class CAC(nn.Module):
         self.data = []
         self.gamma = gamma
         self.action_range = action_range
-        self.state_range = state_range
         self.actions = actions
         self.fc1 = nn.Linear(states, 128)
         self.fc_mu = nn.Linear(128, 1)
         self.fc_std = nn.Linear(128, 1)
         self.fc_v = nn.Linear(128, 1)
-        self.optimizer = optim.Adam(self.parameters(), lr=2e-4)
+        self.optimizer = optim.AdamW(self.parameters(), lr=1e-4)
         self.experience = namedtuple(
             "Experience", field_names=["state", "action", "reward", "new_state"]
         )
@@ -325,9 +323,7 @@ class CAC(nn.Module):
 
     def encode_state(self, obs):        
         x = numpy.atleast_2d(obs).astype('float32')
-        x -= self.state_range[0]
-        x *= 2/(self.state_range[1]-self.state_range[0])
-        return torch.Tensor(x-1)
+        return torch.Tensor(x)
     
     def encode_action(self, actions):
         return (actions - self.action_range[0])/(self.action_range[1]-self.action_range[0])
@@ -348,34 +344,32 @@ class CAC(nn.Module):
         dist = Normal(mu, std)
         sample = dist.sample()
         action = torch.sigmoid(sample).item()    
-        return self.action_range[0] + (self.action_range[1]-self.action_range[0])*action, []
+        return self.action_range[0] + (self.action_range[1]-self.action_range[0])*action, sample
 
     def act(self, state):
         return self.sample(state)
 
     def train(self):
         if len(self.memory) >= self.min_memory:
-            [states, actions, rewards, s_prime] = [
-                torch.Tensor(numpy.stack(x).astype('float32')[:,None]) for x in self.memory.replay()
-            ]
-            actions = self.encode_action(actions)
+            S, samples, rewards, next_S = self.memory.replay()
+            states = self.encode_state(numpy.array(S)[:,None])
+            s_prime = self.encode_state(numpy.array(next_S)[:,None])
+            samples = torch.stack(samples)[:,None]
+            rewards = torch.Tensor(numpy.array(rewards)[:,None])
 
             mu, std = self.pi(states)
             v = self.v(states)
-            v_prime = self.v(s_prime)
 
-            advantage = rewards + self.gamma * v_prime - v
-            critic_loss = advantage**2
-
+            td_target = rewards + self.gamma * self.v(s_prime) 
+            delta = td_target - v
             dist = Normal(mu, std)
 
-            _actions = 5e-5 + (1 - 1e-4) * actions
-            logits = torch.log(_actions / (1 - _actions))
+            logprobs = dist.log_prob(samples)
+            actor_loss = -logprobs * delta.detach()
+            critic_loss = F.smooth_l1_loss(v, td_target.detach())
+            entropy_loss = -dist.entropy()*self.entropy
 
-            actor_loss = -dist.log_prob(logits) * advantage.detach()
-            entropy = -torch.mean(dist.entropy())
-
-            loss = torch.mean(critic_loss + actor_loss) + self.entropy * entropy
+            loss = torch.mean(critic_loss + actor_loss + entropy_loss) 
 
             self.optimizer.zero_grad()
             loss.backward()

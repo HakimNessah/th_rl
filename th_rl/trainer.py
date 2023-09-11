@@ -73,6 +73,8 @@ def train_one(exp_path, configpath):
                 agents[i].memory.append(rewards[i], outs[i]) 
             elif type(agents[i]).__name__=='Exp3':
                 agents[i].memory.append(actions[i], rewards[i])
+            elif type(agents[i]).__name__=='CAC':
+                agents[i].memory.append(state, outs[i], rewards[i], px)
             else:
                 agents[i].memory.append(state, actions[i], rewards[i], px)
 
