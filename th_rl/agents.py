@@ -355,13 +355,10 @@ class CAC(nn.Module):
 
     def train(self):
         if len(self.memory) >= self.min_memory:
-            states, actions, rewards, s_prime = self.memory.replay()
-
-            [actions, rewards] = [
-                numpy.stack(x) for x in [actions, rewards]
+            [states, actions, rewards, s_prime] = [
+                torch.Tensor(numpy.stack(x).astype('float32')[:,None]) for x in self.memory.replay()
             ]
             actions = self.encode_action(actions)
-            breakpoint()
 
             mu, std = self.pi(states)
             v = self.v(states)
@@ -374,6 +371,7 @@ class CAC(nn.Module):
 
             _actions = 5e-5 + (1 - 1e-4) * actions
             logits = torch.log(_actions / (1 - _actions))
+
             actor_loss = -dist.log_prob(logits) * advantage.detach()
             entropy = -torch.mean(dist.entropy())
 
