@@ -348,30 +348,36 @@ class CAC(nn.Module):
         dist = Normal(mu, std)
         sample = dist.sample()
         action = torch.sigmoid(sample).item()    
-        return self.action_range[0] + (self.action_range[1]-self.action_range[0])*action, sample
+        return self.action_range[0] + (self.action_range[1]-self.action_range[0])*action, []
 
     def act(self, state):
         return self.sample(state)
 
     def train(self):
         if len(self.memory) >= self.min_memory:
-            S, samples, rewards, next_S = self.memory.replay()
-            states = self.encode_state(numpy.array(S)[:, None])
-            s_prime = self.encode_state(numpy.array(next_S)[:, None])
-            rewards = torch.Tensor(numpy.array(rewards)[:,None])
+            states, actions, rewards, s_prime = self.memory.replay()
+
+            [actions, rewards] = [
+                numpy.stack(x) for x in [actions, rewards]
+            ]
+            actions = self.encode_action(actions)
+            breakpoint()
+
             mu, std = self.pi(states)
             v = self.v(states)
+            v_prime = self.v(s_prime)
+
+            advantage = rewards + self.gamma * v_prime - v
+            critic_loss = advantage**2
+
             dist = Normal(mu, std)
-            logprobs = dist.log_prob(torch.stack(samples)).squeeze()
 
-            td_target = rewards + self.gamma * self.v(s_prime) 
-            delta = td_target - v
+            _actions = 5e-5 + (1 - 1e-4) * actions
+            logits = torch.log(_actions / (1 - _actions))
+            actor_loss = -dist.log_prob(logits) * advantage.detach()
+            entropy = -torch.mean(dist.entropy())
 
-            actor_loss = -logprobs * delta.squeeze().detach()
-            critic_loss = F.smooth_l1_loss(v, td_target.detach())
-            entropy_loss = -dist.entropy()*self.entropy
-
-            loss = torch.mean(critic_loss + actor_loss + entropy_loss) 
+            loss = torch.mean(critic_loss + actor_loss) + self.entropy * entropy
 
             self.optimizer.zero_grad()
             loss.backward()
