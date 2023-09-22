@@ -10,6 +10,8 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
 from tqdm import tqdm
+from plotly.graph_objects import Layout
+import json
 
 HEIGHT = 600
 WIDTH = 600
@@ -24,8 +26,8 @@ def load_experiment(loc):
     log = pandas.read_csv(os.path.join(loc, "log.csv"))
     names = [a["name"] + str(i) for i, a in enumerate(config["agents"])]
 
-    rewards = log[["rewards", "rewards.1"]].ewm(halflife=1000).mean()
-    actions = log[["actions", "actions.1"]].ewm(halflife=1000).mean()
+    rewards = log[["rewards", "rewards.1"]]  # .ewm(halflife=1000).mean()
+    actions = log[["actions", "actions.1"]]  # .ewm(halflife=1000).mean()
     rewards.columns = names
     actions.columns = names
     return config, agents, environment, actions, rewards
@@ -487,9 +489,7 @@ def box_plot_sweep(
     else:
         ylim = [20, 25]
 
-    layout = Layout(plot_bgcolor="rgba(0,0,0,0)")
-
-    fig = go.Figure(layout=layout)
+    fig = go.Figure()
 
     [
         fig.add_trace(
@@ -508,9 +508,25 @@ def box_plot_sweep(
         width=WIDTH,
         # title_text=title,
         title_x=0.5,
-        legend=dict(x=x, y=y),
+        # legend=dict(x=x, y=y),
         xaxis_title=xlabel,
         yaxis_title=ylabel,
+        showlegend=False,
+        plot_bgcolor="white",
+    )
+    fig.update_xaxes(
+        mirror=True,
+        ticks="outside",
+        showline=True,
+        linecolor="black",
+        gridcolor="lightgrey",
+    )
+    fig.update_yaxes(
+        mirror=True,
+        ticks="outside",
+        showline=True,
+        linecolor="black",
+        gridcolor="lightgrey",
     )
     if return_fig:
         return fig
@@ -565,6 +581,29 @@ def box_plot_player(
     if WRITE:
         fig.write_image(os.path.join(WRITE, title + ".svg"))
 
+'''
+def meta_game_stats(loc):
+    meta = {}
+    for f in os.listdir(loc):
+        rewards = []
+        for i in os.listdir(os.path.join(loc, f)):
+            log = pandas.read_csv(os.path.join(loc, f, i, "log.csv"))
+            R = log[["rewards", "rewards.1"]]  # .ewm(halflife=1000).mean()
+            rewards.append(R.iloc[-1000:, :].values)
+        rewards = numpy.stack(rewards, axis=0)
+        rewards = rewards.mean(axis=1)
+        meta.update(
+            {
+                f: {
+                    "mean": rewards.mean(axis=0).tolist(),
+                    "std": rewards.std(axis=0).tolist(),
+                }
+            }
+        )
+    json.dump(
+        meta, open(os.path.join(WRITE, "rewards_at_convergence.json", "w")), indent=3
+    )
+'''
 
 @click.command()
 @click.option("--dir", help="Experiment dir", type=str)
