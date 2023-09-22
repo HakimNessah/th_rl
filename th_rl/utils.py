@@ -486,8 +486,22 @@ def box_plot_sweep(
         rewards = (rewards - 22.22222) / (25 - 22.22222)
     else:
         ylim = [20, 25]
-    fig = go.Figure()
-    [fig.add_trace(go.Box(y=rewards[:, i], name=name)) for i, name in enumerate(names)]
+
+    layout = Layout(plot_bgcolor="rgba(0,0,0,0)")
+
+    fig = go.Figure(layout=layout)
+
+    [
+        fig.add_trace(
+            go.Box(
+                y=rewards[:, i],
+                name=name,
+                fillcolor="rgb(180,180,180)",
+                marker={"color": "rgb(50,50,50)", "size": 1},
+            )
+        )
+        for i, name in enumerate(names)
+    ]
     fig.update_yaxes(range=ylim)
     fig.update_layout(
         height=HEIGHT,
