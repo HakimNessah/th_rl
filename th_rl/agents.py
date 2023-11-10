@@ -23,10 +23,11 @@ class QTable:
         eps_end=2e-2,
         epsilon=0.5,
         eps_step=5e-4,
+        qinit=12.5,
         min_memory=100,
         **kwargs
     ):
-        self.table = 12.5 / (1 - gamma) + numpy.random.randn(states + 1, actions)
+        self.table = qinit / (1 - gamma) + numpy.random.randn(states + 1, actions)
         self.gamma = gamma
         self.alpha = alpha
         self.action_space = numpy.arange(0, actions)
@@ -346,11 +347,12 @@ class CAC(nn.Module):
         self.data = []
         self.gamma = gamma
         self.action_range = action_range
-        self.fc1 = nn.Linear(states, 256)
-        self.fc_mu = nn.Linear(256, 1)
-        self.fc_std = nn.Linear(256, 1)
-        self.fc_v = nn.Linear(256, 1)
-        self.optimizer = optim.Adam(self.parameters(), lr=2e-4)
+        hidden_size = kwargs.get('hidden_size',256)
+        self.fc1 = nn.Linear(states, hidden_size)
+        self.fc_mu = nn.Linear(hidden_size, 1)
+        self.fc_std = nn.Linear(hidden_size, 1)
+        self.fc_v = nn.Linear(hidden_size, 1)
+        self.optimizer = optim.Adam(self.parameters(), lr=kwargs.get('learning_rate',2e-4))
         self.experience = namedtuple(
             "Experience", field_names=["state", "action", "reward", "done", "new_state"]
         )
