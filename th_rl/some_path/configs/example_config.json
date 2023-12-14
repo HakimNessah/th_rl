@@ -1,0 +1,40 @@
+{
+   "agents": [
+      {
+         "name": "QTable",
+         "gamma": 0.95,
+         "actions": 21,
+         "states": 100,
+         "alpha": 0.1,
+         "eps_end": 0.001,
+         "epsilon": 0.5,
+         "eps_step": 0.9995,
+         "action_range": [
+            0.2,
+            0.4
+         ]
+      },
+      {
+         "name": "A2C",
+         "gamma": 0.995,
+         "actions": 21,
+         "states": 1,
+         "action_range": [
+            0.2,
+            0.4
+         ]
+      }
+   ],
+   "environment": {
+      "name": "NoisyPriceState",
+      "noise_prob": 0,
+      "a": 10,
+      "b": 1,
+      "nplayers": 2,
+      "max_steps": 100
+   },
+   "training": {
+      "print_freq": 500,
+      "epochs": 20000
+   }
+}
