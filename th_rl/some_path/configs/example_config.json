@@ -15,7 +15,7 @@
          ]
       },
       {
-         "name": "A2C",
+         "name": "Reinforce",
          "gamma": 0.995,
          "actions": 21,
          "states": 1,
